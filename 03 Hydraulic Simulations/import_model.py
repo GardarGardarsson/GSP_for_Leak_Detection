@@ -15,6 +15,7 @@ Created on Mon Jul  5 18:47:11 2021
 
 # Import a custom tool for converting EPANET .inp files to networkx graphs
 from utils.epanet_loader import get_nx_graph
+
 # An object oriented library for handling EPANET files in Python
 from epynet import Network
 
@@ -24,6 +25,7 @@ import networkx as nx
 # Function for visualisation
 from utils.visualisation import visualise
 
+# Torch from graph conversion tool
 from torch_geometric.utils import from_networkx
 
 

@@ -32,7 +32,7 @@ Revision history:
 The function has been adjusted for this leakage detection study.
 Renamed 'mode' to a more descriptive 'weight_mode'
 
-Renamed the graph modes:
+Renamed the graph weight modes:
     binary      -> unweighted
     weighted    -> hydraulic_loss
     logarithmic -> log_hydraulic_loss
