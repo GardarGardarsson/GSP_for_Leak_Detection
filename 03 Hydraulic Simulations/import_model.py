@@ -40,7 +40,7 @@ pathToWDN = './BattLeDIM/L-TOWN.inp'
 wdn = epynet.Network(pathToWDN)
 
 # Solve hydraulic model for a single timestep
-wdn.solve()
+# wdn.solve()
 
 # Convert the file using a custom function, based on:
 # https://github.com/BME-SmartLab/GraphConvWat 
@@ -53,7 +53,10 @@ V I S U A L I S E   G R A P H
 # Convert networkx graph to 'torch-geometric.data.Data' object
 data = from_networkx(G)
 
+'''
+Finish up!
+'''
 titles = {'title' : 'A Graph'}
 
 # Visualise the the model using our visualisation utility
-visualise(G, pos=pos, color = data.y, figsize = (16,16), **titles)
+visualise(G, pos=pos, color = data.y, figsize = (20,16), **titles)
