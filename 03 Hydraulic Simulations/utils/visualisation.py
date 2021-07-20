@@ -41,7 +41,8 @@ def visualise(G, pos=None, color='blue', epoch=None, loss=None, figsize=(32,32),
     # If this is a networkx graph
     else:
         #nx.draw(G, {n:[n[0], n[1]] for n in list(G.nodes)}, ax=plt.gca(), node_size=2)
-        nx.draw_networkx(G, pos=pos, with_labels=False,
+        nx.draw_networkx(G, pos=pos, with_labels=True, node_size = 175, 
+                         font_size = 7,font_color = 'w',
                          node_color=color, cmap="Set2")
         
     # Display

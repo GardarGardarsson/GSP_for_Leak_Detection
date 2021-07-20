@@ -35,6 +35,10 @@ C O N V E R T   E P A N E T   T O   G R A P H
 
 # Set the path to the EPANET input file
 pathToWDN = './BattLeDIM/L-TOWN.inp'
+# Other EPANET models we might want to look at
+# pathToWDN = './water_networks/anytown.inp'   
+# pathToWDN = './water_networks/ctown.inp'
+# pathToWDN = './water_networks/richmond.inp'
 
 # Import the .inp file using the EPYNET library
 wdn = epynet.Network(pathToWDN)
@@ -59,4 +63,4 @@ Finish up!
 titles = {'title' : 'A Graph'}
 
 # Visualise the the model using our visualisation utility
-visualise(G, pos=pos, color = data.y, figsize = (20,16), **titles)
+visualise(G, pos=pos, color = data.y, figsize = (30,16), **titles)
