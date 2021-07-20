@@ -47,6 +47,8 @@ G   = get_nx_graph(wdn, weight_mode='inv_pipe_length')
 V I S U A L I S E   G R A P H
 '''
 
+# Convert networkx graph to 'torch-geometric.data.Data' object
 data = from_networkx(G)
 
+# Visualise the the model using our visualisation utility
 visualise(G, color = data.y, figsize = (8,8))

@@ -45,6 +45,7 @@ Renamed the graph weight modes:
   Vað, Skriðdal 
 
 """
+
 def get_nx_graph(wds, weight_mode='unweighted'):
     
     # Instantiate a list of junctions
