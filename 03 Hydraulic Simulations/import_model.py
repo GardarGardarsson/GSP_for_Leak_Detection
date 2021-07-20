@@ -17,7 +17,7 @@ Created on Mon Jul  5 18:47:11 2021
 from utils.epanet_loader import get_nx_graph
 
 # An object oriented library for handling EPANET files in Python
-from epynet import Network
+import epynet 
 
 # Import the networkx library
 import networkx as nx
@@ -37,11 +37,14 @@ C O N V E R T   E P A N E T   T O   G R A P H
 pathToWDN = './BattLeDIM/L-TOWN.inp'
 
 # Import the .inp file using the EPYNET library
-wdn = Network(pathToWDN)
+wdn = epynet.Network(pathToWDN)
+
+# Solve hydraulic model for a single timestep
+wdn.solve()
 
 # Convert the file using a custom function, based on:
 # https://github.com/BME-SmartLab/GraphConvWat 
-G   = get_nx_graph(wdn, weight_mode='inv_pipe_length')
+G , pos = get_nx_graph(wdn, weight_mode='inv_pipe_length')
 
 '''
 V I S U A L I S E   G R A P H
@@ -50,5 +53,7 @@ V I S U A L I S E   G R A P H
 # Convert networkx graph to 'torch-geometric.data.Data' object
 data = from_networkx(G)
 
+titles = {'title' : 'A Graph'}
+
 # Visualise the the model using our visualisation utility
-visualise(G, color = data.y, figsize = (8,8))
+visualise(G, pos=pos, color = data.y, figsize = (16,16), **titles)

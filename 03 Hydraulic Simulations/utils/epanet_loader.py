@@ -15,6 +15,7 @@ Created on Mon Jul  5 18:29:39 2021
 
 import numpy as np
 import networkx as nx
+from utils.helpers import list_of_dict_search
 
 """ 
 get_nx_graph(wds, mode)
@@ -48,13 +49,13 @@ Renamed the graph weight modes:
 
 def get_nx_graph(wds, weight_mode='unweighted'):
     
-    # Instantiate a list of junctions
-    junc_list = []
+    # Instantiate a dict of junctions
+    junc_dict = {}
     
     # Populate the junction list
     for junction in wds.junctions:
-        junc_list.append(junction.index)
-        
+        junc_dict[junction.index] = (junction.coordinates[0], junction.coordinates[1])
+    
     # Instantiate an empty graph
     G = nx.Graph()
     
@@ -63,20 +64,20 @@ def get_nx_graph(wds, weight_mode='unweighted'):
     # Binary mode generates an unweighted graph
     if weight_mode == 'unweighted':
         for pipe in wds.pipes:
-            if (pipe.from_node.index in junc_list) and (pipe.to_node.index in junc_list):
+            if (pipe.from_node.index in junc_dict) and (pipe.to_node.index in junc_dict):
                 G.add_edge(pipe.from_node.index, pipe.to_node.index, weight=1.)
         for pump in wds.pumps:
-            if (pump.from_node.index in junc_list) and (pump.to_node.index in junc_list):
+            if (pump.from_node.index in junc_dict) and (pump.to_node.index in junc_dict):
                 G.add_edge(pump.from_node.index, pump.to_node.index, weight=1.)
         for valve in wds.valves:
-            if (valve.from_node.index in junc_list) and (valve.to_node.index in junc_list):
+            if (valve.from_node.index in junc_dict) and (valve.to_node.index in junc_dict):
                 G.add_edge(valve.from_node.index, valve.to_node.index, weight=1.)
     
     # Generate a weighted graph based on hydraulic loss calculations
     elif weight_mode == 'hydraulic_loss':
         max_weight = 0
         for pipe in wds.pipes:
-            if (pipe.from_node.index in junc_list) and (pipe.to_node.index in junc_list):
+            if (pipe.from_node.index in junc_dict) and (pipe.to_node.index in junc_dict):
                 weight  = ((pipe.diameter*3.281)**4.871 * pipe.roughness**1.852) / (4.727*pipe.length*3.281)
                 G.add_edge(pipe.from_node.index, pipe.to_node.index, weight=weight)
                 if weight > max_weight:
@@ -84,17 +85,17 @@ def get_nx_graph(wds, weight_mode='unweighted'):
         for (_,_,d) in G.edges(data=True):
             d['weight'] /= max_weight
         for pump in wds.pumps:
-            if (pump.from_node.index in junc_list) and (pump.to_node.index in junc_list):
+            if (pump.from_node.index in junc_dict) and (pump.to_node.index in junc_dict):
                 G.add_edge(pump.from_node.index, pump.to_node.index, weight=1.)
         for valve in wds.valves:
-            if (valve.from_node.index in junc_list) and (valve.to_node.index in junc_list):
+            if (valve.from_node.index in junc_dict) and (valve.to_node.index in junc_dict):
                 G.add_edge(valve.from_node.index, valve.to_node.index, weight=1.)
 
     # A logarithmically weighted graph
     elif weight_mode == 'log_hydraulic_loss':
         max_weight = 0
         for pipe in wds.pipes:
-            if (pipe.from_node.index in junc_list) and (pipe.to_node.index in junc_list):
+            if (pipe.from_node.index in junc_dict) and (pipe.to_node.index in junc_dict):
                 weight  = np.log10(((pipe.diameter*3.281)**4.871 * pipe.roughness**1.852) / (4.727*pipe.length*3.281))
                 G.add_edge(pipe.from_node.index, pipe.to_node.index, weight=float(weight))
                 if weight > max_weight:
@@ -102,29 +103,29 @@ def get_nx_graph(wds, weight_mode='unweighted'):
         for (_,_,d) in G.edges(data=True):
             d['weight'] /= max_weight
         for pump in wds.pumps:
-            if (pump.from_node.index in junc_list) and (pump.to_node.index in junc_list):
+            if (pump.from_node.index in junc_dict) and (pump.to_node.index in junc_dict):
                 G.add_edge(pump.from_node.index, pump.to_node.index, weight=1.)
         for valve in wds.valves:
-            if (valve.from_node.index in junc_list) and (valve.to_node.index in junc_list):
+            if (valve.from_node.index in junc_dict) and (valve.to_node.index in junc_dict):
                 G.add_edge(valve.from_node.index, valve.to_node.index, weight=1.)
     
     # Pruned?
     elif weight_mode == 'pruned':
         for pipe in wds.pipes:
-            if (pipe.from_node.index in junc_list) and (pipe.to_node.index in junc_list):
+            if (pipe.from_node.index in junc_dict) and (pipe.to_node.index in junc_dict):
                 G.add_edge(pipe.from_node.index, pipe.to_node.index, weight=0.)
         for pump in wds.pumps:
-            if (pump.from_node.index in junc_list) and (pump.to_node.index in junc_list):
+            if (pump.from_node.index in junc_dict) and (pump.to_node.index in junc_dict):
                 G.add_edge(pump.from_node.index, pump.to_node.index, weight=0.)
         for valve in wds.valves:
-            if (valve.from_node.index in junc_list) and (valve.to_node.index in junc_list):
+            if (valve.from_node.index in junc_dict) and (valve.to_node.index in junc_dict):
                 G.add_edge(valve.from_node.index, valve.to_node.index, weight=0.)
 
     # A pipe length weighted graph
     elif weight_mode == 'pipe_length':
         max_weight = 0
         for pipe in wds.pipes:
-            if (pipe.from_node.index in junc_list) and (pipe.to_node.index in junc_list):
+            if (pipe.from_node.index in junc_dict) and (pipe.to_node.index in junc_dict):
                 weight  = pipe.length
                 G.add_edge(pipe.from_node.index, pipe.to_node.index, weight=float(weight))
                 if weight > max_weight:
@@ -132,17 +133,17 @@ def get_nx_graph(wds, weight_mode='unweighted'):
         for (_,_,d) in G.edges(data=True):
             d['weight'] /= max_weight
         for pump in wds.pumps:
-            if (pump.from_node.index in junc_list) and (pump.to_node.index in junc_list):
+            if (pump.from_node.index in junc_dict) and (pump.to_node.index in junc_dict):
                 G.add_edge(pump.from_node.index, pump.to_node.index, weight=1.)
         for valve in wds.valves:
-            if (valve.from_node.index in junc_list) and (valve.to_node.index in junc_list):
+            if (valve.from_node.index in junc_dict) and (valve.to_node.index in junc_dict):
                 G.add_edge(valve.from_node.index, valve.to_node.index, weight=1.)
       
     # An inverted pipe length weighted graph
     elif weight_mode == 'inv_pipe_length':
         max_weight = 0
         for pipe in wds.pipes:
-            if (pipe.from_node.index in junc_list) and (pipe.to_node.index in junc_list):
+            if (pipe.from_node.index in junc_dict) and (pipe.to_node.index in junc_dict):
                 weight  = (pipe.length)**(-1)
                 G.add_edge(pipe.from_node.index, pipe.to_node.index, weight=float(weight))
                 if weight > max_weight:
@@ -150,11 +151,12 @@ def get_nx_graph(wds, weight_mode='unweighted'):
         for (_,_,d) in G.edges(data=True):
             d['weight'] /= max_weight
         for pump in wds.pumps:
-            if (pump.from_node.index in junc_list) and (pump.to_node.index in junc_list):
+            if (pump.from_node.index in junc_dict) and (pump.to_node.index in junc_dict):
                 G.add_edge(pump.from_node.index, pump.to_node.index, weight=1.)
         for valve in wds.valves:
-            if (valve.from_node.index in junc_list) and (valve.to_node.index in junc_list):
+            if (valve.from_node.index in junc_dict) and (valve.to_node.index in junc_dict):
                 G.add_edge(valve.from_node.index, valve.to_node.index, weight=1.)
                    
-    # Return the graph object
-    return G
+    # Return the graph object and junction dictionary which 
+    # holds the GIS coordinates (positions) of the nodes
+    return G, junc_dict
