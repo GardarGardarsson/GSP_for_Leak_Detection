@@ -14,6 +14,7 @@ Created on Mon Jul  5 18:29:39 2021
 """
 
 import numpy as np
+import pandas as pd
 import networkx as nx
 from utils.helpers import list_of_dict_search
 
@@ -47,14 +48,26 @@ Renamed the graph weight modes:
 
 """
 
-def get_nx_graph(wds, weight_mode='unweighted'):
+def get_nx_graph(wds, weight_mode='unweighted', get_head=False):
     
     # Instantiate a dict of junctions
     junc_dict = {}
     
+    # There is an option to retrieve the hydraulic head measurements
+    if get_head:
+        head_dict = {}
+    
     # Populate the junction list
     for junction in wds.junctions:
         junc_dict[junction.index] = (junction.coordinates[0], junction.coordinates[1])
+        
+        # We generate a dictionary of hydraulic head data addressed like the GIS coords
+        if get_head:
+            head_dict[junction.index] = junction.head
+    
+    # Then convert the head data to a pandas series for easier manipulation
+    if get_head:
+        head = pd.Series(head_dict)
     
     # Instantiate an empty graph
     G = nx.Graph()
@@ -157,6 +170,12 @@ def get_nx_graph(wds, weight_mode='unweighted'):
             if (valve.from_node.index in junc_dict) and (valve.to_node.index in junc_dict):
                 G.add_edge(valve.from_node.index, valve.to_node.index, weight=1.)
                    
-    # Return the graph object and junction dictionary which 
+    # Return the graph object a junction dictionary which 
     # holds the GIS coordinates (positions) of the nodes
-    return G, junc_dict
+    # and the hydraulic heads at each node
+    if get_head:
+        return G, junc_dict, head
+    
+    # If head is not asked for we don't return it
+    else:
+        return G, junc_dict

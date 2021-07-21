@@ -19,7 +19,7 @@ import matplotlib.pyplot as plt
 
 
 # Helper function for visualisation
-def visualise(G, pos=None, color='blue', epoch=None, loss=None, figsize=(32,32), **kwargs):
+def visualise(G, pos=None, color='blue', epoch=None, loss=None, figsize=(32,32), edge_labels=True, **kwargs):
     
     # If coordinates were not passed to the plotting function
     if not pos:
@@ -40,10 +40,14 @@ def visualise(G, pos=None, color='blue', epoch=None, loss=None, figsize=(32,32),
             
     # If this is a networkx graph
     else:
-        #nx.draw(G, {n:[n[0], n[1]] for n in list(G.nodes)}, ax=plt.gca(), node_size=2)
-        nx.draw_networkx(G, pos=pos, with_labels=True, node_size = 175, 
+        nx.draw_networkx(G, pos=pos, arrows = G.is_directed(),
+                         with_labels=True, node_size = 175, 
                          font_size = 7,font_color = 'w',
-                         node_color=color, cmap="Set2")
+                         node_color=color)
+        #labels = nx.get_edge_attributes(G,'weight')
+        labels = dict([((u,v,), f"{d['weight']:.2f}") for u,v,d in G.edges(data=True)])
+
+        nx.draw_networkx_edge_labels(G,pos,edge_labels=labels)
         
     # Display
     plt.show()
