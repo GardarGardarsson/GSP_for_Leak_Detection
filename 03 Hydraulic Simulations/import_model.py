@@ -22,6 +22,9 @@ import epynet
 # Import the networkx library
 import networkx as nx
 
+# Import Pandas for data handling
+import pandas as pd
+
 # Matplotlib functionality
 import matplotlib.pyplot as plt
 
@@ -31,7 +34,7 @@ from utils.visualisation import visualise
 # Torch from graph conversion tool
 from torch_geometric.utils import from_networkx
 
-
+#%%
 
 '''
 C O N V E R T   E P A N E T   T O   G R A P H
@@ -55,6 +58,8 @@ wdn.solve()
 # https://github.com/BME-SmartLab/GraphConvWat 
 G , pos , head = get_nx_graph(wdn, weight_mode='pipe_length', get_head=True)
 
+#%%
+
 '''
 V I S U A L I S E   G R A P H
 '''
@@ -62,11 +67,19 @@ V I S U A L I S E   G R A P H
 # Perform min-max scaling on the head data, scale it to the interval [0,1]
 head  = (head - head.min()) / (head.max() - head.min()) # Try standard scaling
 
+# Pressure sensors are located at the following nodes (from .yml file)
+sensors = [1, 4, 31, 54, 105, 114, 163, 188, 215, 229, 288, 296, 332, 342, 
+           410, 415, 429, 458, 469, 495, 506, 516, 519, 549, 613, 636, 644,
+           679, 722, 726, 740, 752, 769]
+
+# 
+sensor_map = pd.Series([1.0 if i in sensors else 0.0 for i in range(1,783)])
+
 # Generate a colormap
 cmap  = plt.get_cmap('coolwarm')
 
 # Fit the datapoints to the colormap
-color = cmap(head)
+color = cmap(sensor_map)
 
 # Visualise the the model using our visualisation utility
 visualise(G, pos=pos, color = color, figsize = (60,32), edge_labels=True)

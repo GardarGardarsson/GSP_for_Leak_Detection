@@ -170,12 +170,17 @@ def get_nx_graph(wds, weight_mode='unweighted', get_head=False):
             if (valve.from_node.index in junc_dict) and (valve.to_node.index in junc_dict):
                 G.add_edge(valve.from_node.index, valve.to_node.index, weight=1.)
                    
+    # So I have an issue with the sorting of the nodes of the imported graph
+    H = nx.Graph()
+    H.add_nodes_from(sorted(G.nodes(data=True)))
+    H.add_edges_from(G.edges(data=True))            
+                
     # Return the graph object a junction dictionary which 
     # holds the GIS coordinates (positions) of the nodes
     # and the hydraulic heads at each node
     if get_head:
-        return G, junc_dict, head
+        return H, junc_dict, head
     
     # If head is not asked for we don't return it
     else:
-        return G, junc_dict
+        return H, junc_dict
