@@ -53,7 +53,7 @@ wdn.solve()
 
 # Convert the file using a custom function, based on:
 # https://github.com/BME-SmartLab/GraphConvWat 
-G , pos , head = get_nx_graph(wdn, weight_mode='inv_pipe_length', get_head = True)
+G , pos , head = get_nx_graph(wdn, weight_mode='pipe_length', get_head=True)
 
 '''
 V I S U A L I S E   G R A P H
@@ -70,6 +70,9 @@ color = cmap(head)
 
 # Visualise the the model using our visualisation utility
 visualise(G, pos=pos, color = color, figsize = (60,32), edge_labels=True)
+
+
+#%%
 
 '''
 C O N V E R T   P H Y S I C A L   G R A P H   T O    C O M P U T A T I O N   G R A P H 

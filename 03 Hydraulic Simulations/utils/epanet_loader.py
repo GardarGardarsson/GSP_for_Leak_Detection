@@ -122,7 +122,7 @@ def get_nx_graph(wds, weight_mode='unweighted', get_head=False):
             if (valve.from_node.index in junc_dict) and (valve.to_node.index in junc_dict):
                 G.add_edge(valve.from_node.index, valve.to_node.index, weight=1.)
     
-    # Pruned?
+    # Pruned, all weights set to zero
     elif weight_mode == 'pruned':
         for pipe in wds.pipes:
             if (pipe.from_node.index in junc_dict) and (pipe.to_node.index in junc_dict):
@@ -142,7 +142,7 @@ def get_nx_graph(wds, weight_mode='unweighted', get_head=False):
                 weight  = pipe.length
                 G.add_edge(pipe.from_node.index, pipe.to_node.index, weight=float(weight))
                 if weight > max_weight:
-                    max_weight = weight
+                    max_weight = weight    
         for (_,_,d) in G.edges(data=True):
             d['weight'] /= max_weight
         for pump in wds.pumps:
@@ -157,7 +157,7 @@ def get_nx_graph(wds, weight_mode='unweighted', get_head=False):
         max_weight = 0
         for pipe in wds.pipes:
             if (pipe.from_node.index in junc_dict) and (pipe.to_node.index in junc_dict):
-                weight  = (pipe.length)**(-1)
+                weight  = 1/(pipe.length)
                 G.add_edge(pipe.from_node.index, pipe.to_node.index, weight=float(weight))
                 if weight > max_weight:
                     max_weight = weight
