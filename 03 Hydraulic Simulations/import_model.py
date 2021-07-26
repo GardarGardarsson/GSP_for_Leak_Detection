@@ -213,7 +213,18 @@ if __name__ == "__main__" :
     H V A Ð   E R   N Æ S T
     '''
     
+    # Ég sé ekki alveg hvernig ég á að fara að því að þróa módelið öðruvísi
+    # en að byrja með hermun af L-Town og stinga út nemana sem eru observed.
+    # Þjálfa þannig og prófa svo á SCADA gögnunum.
     
+    # Hvað get ég gert til að gera samanburðarlíkanið?
+    
+    # Er það alltaf eitthvað groundhog day líkan bara :S ?
+    
+    # Current --+
+    #           |--->
+    # Non-leaky-+
+        
     
     #%% Convert the graph to a computation graph
     
