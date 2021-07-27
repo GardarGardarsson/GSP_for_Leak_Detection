@@ -8,10 +8,16 @@
 |                               |
 +-------------------------------+
 
+Description
+
 Created on Mon Jul  5 18:47:11 2021
 
 @author: gardar
 """
+
+# --------------------------
+# Importing public libraries
+# --------------------------
 
 # Operating system specific functions
 import os
@@ -37,6 +43,9 @@ import matplotlib.pyplot as plt
 # PyTorch from graph conversion tool
 from torch_geometric.utils import from_networkx
 
+# Train-test split with shuffle 
+from sklearn.model_selection import train_test_split
+
 # --------------------------
 # Importing custom libraries
 # --------------------------
@@ -54,16 +63,19 @@ from utils.epanet_loader import get_nx_graph
 # Function for visualisation
 from utils.visualisation import visualise
 
-# FROM
-from utils.data_loader import dataLoader
+# EPANET simulator, used to generate nodal pressures from the nominal model
+from utils.epanet_simulator import epanetSimulator
+
+# SCADA timeseries dataloader
+from utils.data_loader import dataLoader, dataCleaner
+
+    #%% Parse arguments
 
 # Main loop
 if __name__ == "__main__" :
-
-    #%% Parse arguments
     
     '''
-    C O N F I G U R E   E X E C U T I O N   -   A R G P A R S E R 
+    1.   C O N F I G U R E   E X E C U T I O N   -   A R G P A R S E R
     '''
     
     # Generate an argument parser
@@ -98,29 +110,37 @@ if __name__ == "__main__" :
     print("\nArguments for session: \n" + 22*"-" + "\n{}".format(args) + "\n")
     
     
-    #%% Convert EPANET hydraulic model to networkx graph
+    #%%n Set the filepaths for the execution
     
     '''
-    C O N V E R T   E P A N E T   T O   G R A P H
+    2.   C O N F I G U R E   E X E C U T I O N   -   P A T H S
     '''
     
-    print('Importing EPANET file and converting to graph...\n')
+    print('Setting environment paths...\n')
     
     # Set the path to the EPANET input file
     if args.wdn == 'ltown':
-        pathToWDN = './BattLeDIM/L-TOWN.inp'
+        path_to_wdn = './BattLeDIM/L-TOWN.inp' # Do I need to distinguish between REAL and NOMINAL EPANET inps here?        
     elif args.wdn == 'anytown':
-        pathToWDN = './water_networks/anytown.inp'   
+        path_to_wdn = './water_networks/anytown.inp'   
     elif args.wdn == 'ctown':
-        pathToWDN = './water_networks/ctown.inp'
+        path_to_wdn = './water_networks/ctown.inp'
     elif args.wdn == 'richmond':
-        pathToWDN = './water_networks/richmond.inp'
+        path_to_wdn = './water_networks/richmond.inp'
     else:
         print('Unknown WDN, exiting')
         exit()
     
+    #%% Convert EPANET hydraulic model to networkx graph
+    
+    '''
+    3.   C O N V E R T   E P A N E T   T O   G R A P H
+    '''
+    
+    print('Importing EPANET file and converting to graph...\n')
+    
     # Import the .inp file using the EPYNET library
-    wdn = epynet.Network(pathToWDN)
+    wdn = epynet.Network(path_to_wdn)
     
     # Solve hydraulic model for a single timestep
     wdn.solve()
@@ -129,10 +149,11 @@ if __name__ == "__main__" :
     # https://github.com/BME-SmartLab/GraphConvWat 
     G , pos , head = get_nx_graph(wdn, weight_mode='pipe_length', get_head=True)
     
+    
     #%% Read in dataset configuration (.yml)
     
     '''
-    I M P O R T   D A T A S E T   C O N F I G
+    4.   I M P O R T   D A T A S E T   C O N F I G
     '''
     
     print('Importing dataset configuration...\n')
@@ -151,7 +172,7 @@ if __name__ == "__main__" :
     #%% Visualise the created graph
     
     '''
-    V I S U A L I S E   G R A P H
+    5.   V I S U A L I S E   G R A P H
     '''
     
     # If user chose to generate plot
@@ -183,16 +204,17 @@ if __name__ == "__main__" :
         
         plt.show()
 
+
     # %% Import timeseries data
     
     '''
-    I M P O R T   D A T A S E T 
+    6.   I M P O R T   S C A D A   D A T A 
     '''
     
-    print('Importing dataset...\n') 
+    print('Importing SCADA dataset...\n') 
     
     # Load the data into a numpy array with format matching the GraphConvWat problem
-    pressure_2018 = dataLoader(sensors,
+    pressure_2018 = dataLoader(observed_nodes=sensors,
                                n_nodes=782,
                                path='./BattLeDIM/',
                                file='2018_SCADA_Pressures.csv')
@@ -205,27 +227,52 @@ if __name__ == "__main__" :
     print("'i' is the number of observations: {}".format(pressure_2018.shape[0]))
     print("'n' is the number of nodes: {}".format(pressure_2018.shape[1]))
     print("'d' is a {}-dimensional vector consisting of the pressure value and a mask ".format(pressure_2018.shape[2]))
-    print("The mask is set to '1' on observed nodes and '0' otherwise")
+    print("The mask is set to '1' on observed nodes and '0' otherwise\n")
+    
+    print("\n" + len(msg)*"-" + "\n")
+    
+    # %% Generate the nominal pressure data from an EPANET simulation
+    
+    '''
+    7.   G E N E R A T E   N O M I N A L   D A T A
+    '''
+    
+    print('Running EPANET simulation to generate nominal pressure data...\n') 
+    
+    # We run an EPANET simulation using the WNTR library and the EPANET
+    # nominal model supplied with the BattLeDIM competition. 
+    # With this simulation, we have a complete pressure signal for all
+    # nodes in the network, on which the GNN algorithm is to be trained.
+    
+    # Instantiate the nominal WDN model
+    nominal_wdn_model = epanetSimulator(path_to_wdn)
+
+    # Run a simulation
+    nominal_wdn_model.simulate()
+    
+    # Retrieve the nodal pressures
+    nominal_pressure = nominal_wdn_model.get_simulated_pressure()
     
     # %%
     
-    '''
-    H V A Ð   E R   N Æ S T
-    '''
-    
-    # Ég sé ekki alveg hvernig ég á að fara að því að þróa módelið öðruvísi
-    # en að byrja með hermun af L-Town og stinga út nemana sem eru observed.
-    # Þjálfa þannig og prófa svo á SCADA gögnunum.
-    
-    # Hvað get ég gert til að gera samanburðarlíkanið?
-    
-    # Er það alltaf eitthvað groundhog day líkan bara :S ?
-    
-    # Current --+
-    #           |--->
-    # Non-leaky-+
+    """
+    8.   P R E P A R E   T R A I N I N G   D A T A    
+    """
         
+    # Populate feature vector x and label vector y from the nominal pressures
+    x,y = dataCleaner(pressure_df=nominal_pressure,
+                      observed_nodes=sensors)
     
+    x_train, x_test, y_train, y_test = train_test_split(x,y, 
+                                                        test_size=0.2,
+                                                        random_state=1,
+                                                        shuffle=False)
+    
+    # %%
+    """
+    MAKE THE MODELS AND TRAIN THEM!
+    """
+        
     #%% Convert the graph to a computation graph
     
     '''
@@ -234,3 +281,5 @@ if __name__ == "__main__" :
     
     # Convert networkx graph to 'torch-geometric.data.Data' object
     data = from_networkx(G)
+    
+    

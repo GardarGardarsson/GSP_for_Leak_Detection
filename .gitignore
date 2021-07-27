@@ -39,6 +39,11 @@
 *.sql
 *.sqlite
 
+# EPANET WNTR Turds #
+#####################
+*.bin
+*.rpt
+
 # OS generated files #
 ######################
 .DS_Store
