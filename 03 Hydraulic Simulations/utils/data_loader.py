@@ -13,12 +13,17 @@ Created on Fri Jul 23 15:24:59 2021
 @author: gardar
 """
 
+import torch
 import numpy as np
 import pandas as pd
+import networkx as nx
+from torch_geometric.data import DataLoader
+from torch_geometric.utils import from_networkx
+
 from sklearn.preprocessing import MinMaxScaler, StandardScaler
 
 # Function to load the timeseries datasets of the BattLeDIM challenge
-def dataLoader(observed_nodes, n_nodes=782, path='./BattLeDIM/', file='2018_SCADA_Pressures.csv'):
+def battledimLoader(observed_nodes, n_nodes=782, path='./BattLeDIM/', file='2018_SCADA_Pressures.csv'):
     '''
     Function for loading the SCADA .csv datasets of the BattLeDIM competition
     and returning it in a dataformat suitable for the GNN model to ingest.
@@ -168,3 +173,23 @@ def dataCleaner(pressure_df, observed_nodes, rescale=None):
     y      = np.stack((y_arr, ),axis=2)
     
     return x,y
+
+# Function that embeds the x-y labels on the graph and returns a DataLoader obj.
+def dataGenerator(G, features, labels, batch_size, shuffle):
+    
+    # Initialise empty data list
+    data    = []
+    
+    # For each array in the passed sets
+    for x, y in zip(features, labels):
+        graph   = from_networkx(G)  # Turn graph into tensor
+        graph.x = torch.Tensor(x)   # Embed features on graph
+        graph.y = torch.Tensor(y)   # Embed labels to the graph
+        data.append(graph)          # Append the tensorised graph reps to the data list
+    
+    # Construct a generator (data loader) from the list of graphs
+    generator = DataLoader(data, 
+                           batch_size = batch_size, 
+                           shuffle    = shuffle)
+    
+    return generator

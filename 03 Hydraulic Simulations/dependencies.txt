@@ -1,0 +1,8 @@
+Packages of the environment GSP were installed in the following order:
+
+conda install pytorch torchvision torchaudio -c pytorch
+conda install pytorch-geometric -c rusty1s -c conda-forge
+pip install epynet
+pip install wntr
+conda install dask
+pip install zarr

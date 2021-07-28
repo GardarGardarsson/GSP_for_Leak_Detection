@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""
+'''
 
 +-------------------------------+
 |                               |
@@ -13,7 +13,7 @@ Description
 Created on Mon Jul  5 18:47:11 2021
 
 @author: gardar
-"""
+'''
 
 # --------------------------
 # Importing public libraries
@@ -31,11 +31,17 @@ import epynet
 # yaml / yml configuration file support
 import yaml
 
+# PyTorch deep learning framework
+import torch
+
 # Import the networkx library
 import networkx as nx
 
 # Import Pandas for data handling
 import pandas as pd
+
+# Import numpy for array handling
+import numpy as np
 
 # Matplotlib for generating graphics
 import matplotlib.pyplot as plt
@@ -67,9 +73,19 @@ from utils.visualisation import visualise
 from utils.epanet_simulator import epanetSimulator
 
 # SCADA timeseries dataloader
-from utils.data_loader import dataLoader, dataCleaner
+from utils.data_loader import battledimLoader, dataCleaner, dataGenerator
 
-    #%% Parse arguments
+# PyTorch early stopping callback
+from utils.early_stopping import EarlyStopping
+
+# Metrics
+from utils.metrics import Metrics
+
+# GNN model library
+from modules.gnn_models import ChebNet
+
+
+#%% Parse arguments
 
 # Main loop
 if __name__ == "__main__" :
@@ -77,6 +93,9 @@ if __name__ == "__main__" :
     '''
     1.   C O N F I G U R E   E X E C U T I O N   -   A R G P A R S E R
     '''
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    print("\nRunning: \t 'import_model.py' ")
+    print("Using device: \t {}".format(device))
     
     # Generate an argument parser
     parser = argparse.ArgumentParser()
@@ -154,7 +173,7 @@ if __name__ == "__main__" :
     
     # Convert the file using a custom function, based on:
     # https://github.com/BME-SmartLab/GraphConvWat 
-    G , pos , head = get_nx_graph(wdn, weight_mode='pipe_length', get_head=True)
+    G , pos , head = get_nx_graph(wdn, weight_mode='inv_pipe_length', get_head=True)
     
     
     #%% Read in dataset configuration (.yml)
@@ -179,7 +198,7 @@ if __name__ == "__main__" :
     #%% Visualise the created graph
     
     '''
-    5.   V I S U A L I S E   G R A P H
+    5.   V I S U A L I S E   G R A P H   &   P R I N T   I N F O 
     '''
     
     # If user chose to generate plot
@@ -210,8 +229,17 @@ if __name__ == "__main__" :
         
         plt.show()
 
-
-    # %% Import timeseries data
+    # We may want to find the largest subgraph diameter
+    largest_subgraph_diameter = 0
+    
+    # For each component of the imported network
+    for c in nx.connected_components(G):
+        graph = G.subgraph(c)                       # Generate a subgraph
+        diameter = nx.diameter(graph)               # Measure its diameter
+        if diameter > largest_subgraph_diameter:    # If it's the longest encountered
+            diameter = largest_subgraph_diameter    # Store it  
+        
+    #%% Import timeseries data
     
     '''
     6.   I M P O R T   S C A D A   D A T A 
@@ -220,10 +248,10 @@ if __name__ == "__main__" :
     print('Importing SCADA dataset...\n') 
     
     # Load the data into a numpy array with format matching the GraphConvWat problem
-    pressure_2018 = dataLoader(observed_nodes = sensors,
-                               n_nodes        = 782,
-                               path           = './BattLeDIM/',
-                               file           = '2018_SCADA_Pressures.csv')
+    pressure_2018 = battledimLoader(observed_nodes = sensors,
+                                    n_nodes        = 782,
+                                    path           = './BattLeDIM/',
+                                    file           = '2018_SCADA_Pressures.csv')
     
     # Print information and instructions about the imported data
     msg = "The imported sensor data has shape (i,n,d): {}".format(pressure_2018.shape)
@@ -237,7 +265,7 @@ if __name__ == "__main__" :
     
     print("\n" + len(msg)*"-" + "\n")
     
-    # %% Generate the nominal pressure data from an EPANET simulation
+    #%% Generate the nominal pressure data from an EPANET simulation
     
     '''
     7.   G E N E R A T E   N O M I N A L   D A T A
@@ -259,35 +287,129 @@ if __name__ == "__main__" :
     # Retrieve the nodal pressures
     nominal_pressure = nominal_wdn_model.get_simulated_pressure()
     
-    # %%
+    #%% Load the nominal pressure data and prepare for training
     
-    """
+    '''
     8.   P R E P A R E   T R A I N I N G   D A T A    
-    """
+    '''
         
     # Populate feature vector x and label vector y from the nominal pressures
     x,y = dataCleaner(pressure_df    = nominal_pressure, # Pass the nodal pressures
                       observed_nodes = sensors,          # Indicate which nodes have sensors
                       rescale        = args.scaling)     # Perform scaling on the timeseries data
     
-    # Split the data into training and test sets
-    x_train, x_test, y_train, y_test = train_test_split(x,y, 
-                                                        test_size    = 0.2,
-                                                        random_state = 1,
-                                                        shuffle      = False)
-    
-    # %%
-    """
-    MAKE THE MODELS AND TRAIN THEM!
-    """
+    # Split the data into training and validation sets
+    x_trn, x_val, y_trn, y_val = train_test_split(x, y, 
+                                                  test_size    = 0.2,
+                                                  random_state = 1,
+                                                  shuffle      = False)
+     
         
     #%% Convert the graph to a computation graph
     
     '''
-    C O N V E R T   P H Y S I C A L   G R A P H   T O    C O M P U T A T I O N   G R A P H 
+    9. C O N V E R T   P H Y S I C A L   G R A P H   T O    C O M P U T A T I O N   G R A P H 
     '''
+    def train_one_epoch(trn_gnrtr):
+        model.train()
+        total_loss  = 0
+        for batch in trn_gnrtr:
+            batch   = batch.to(device)
+            optimizer.zero_grad()
+            out     = model(batch)
+            loss    = torch.nn.functional.mse_loss(out, batch.y)
+            loss.backward()
+            optimizer.step()
+            total_loss  += loss.item() * batch.num_graphs
+        return total_loss / len(trn_gnrtr.dataset)
     
-    # Convert networkx graph to 'torch-geometric.data.Data' object
-    data = from_networkx(G)
+    def eval_metrics(generator):
+        model.eval()
+        n   = len(generator.dataset)
+        tot_loss        = 0
+        tot_rel_err     = 0
+        tot_rel_err_obs = 0
+        tot_rel_err_hid = 0
+        for batch in generator:
+            batch   = batch.to(device)
+            out     = model(batch)
+            loss    = torch.nn.functional.mse_loss(out, batch.y)
+            rel_err = metrics.rel_err(out, batch.y)
+            rel_err_obs = metrics.rel_err(
+                out,
+                batch.y,
+                batch.x[:, -1].type(torch.bool)
+                )
+            rel_err_hid = metrics.rel_err(
+                out,
+                batch.y,
+                ~batch.x[:, -1].type(torch.bool)
+                )
+            tot_loss        += loss.item() * batch.num_graphs
+            tot_rel_err     += rel_err.item() * batch.num_graphs
+            tot_rel_err_obs += rel_err_obs.item() * batch.num_graphs
+            tot_rel_err_hid += rel_err_hid.item() * batch.num_graphs
+        loss        = tot_loss / n
+        rel_err     = tot_rel_err / n
+        rel_err_obs = tot_rel_err_obs / n
+        rel_err_hid = tot_rel_err_hid / n
+        return loss, rel_err, rel_err_obs, rel_err_hid
     
+    # ----------------
+    # Hyper-parameters
+    # ----------------
+    batch_size    = 40
+    learning_rate = 3e-4
+    decay         = 6e-6
+    shuffle       = False
+    epochs        = 1
+    
+    # Instantiate the data generators
+    trn_gnrtr = dataGenerator(G, x_trn, y_trn, batch_size, shuffle)
+    val_gnrtr = dataGenerator(G, x_val, y_val, batch_size, shuffle)
+    
+    
+    model = ChebNet(np.shape(x_trn)[-1], np.shape(y_trn)[-1]).to(device)
+    
+    optimizer = torch.optim.Adam([dict(params=model.conv1.parameters(), weight_decay=args.decay),
+                                  dict(params=model.conv2.parameters(), weight_decay=args.decay),
+                                  dict(params=model.conv3.parameters(), weight_decay=args.decay),
+                                  dict(params=model.conv4.parameters(), weight_decay=0)],
+                                  lr  = learning_rate,
+                                  eps = 1e-7)
+    estop   = EarlyStopping(min_delta=.00001, patience=30)
+    
+    if args.scaling == 'standard':
+        scale_y = np.std(y_trn)
+        bias_y  = np.mean(y_trn)
+        
+    metrics = Metrics(bias_y, scale_y, device)
+    best_vld_loss   = np.inf
+    results = pd.DataFrame(columns=[
+    'trn_loss', 'vld_loss', 'vld_rel_err', 'vld_rel_err_o', 'vld_rel_err_h'
+    ])
+    header  = ''.join(['{:^15}'.format(colname) for colname in results.columns])
+    header  = '{:^5}'.format('epoch') + header
+    for epoch in range(0, args.epoch):
+        trn_loss    = train_one_epoch()
+        vld_loss, vld_rel_err, vld_rel_err_obs, vld_rel_err_hid = eval_metrics(val_gnrtr)
+        new_results = pd.Series({
+            'trn_loss'      : trn_loss,
+            'vld_loss'      : vld_loss,
+            'vld_rel_err'   : vld_rel_err,
+            'vld_rel_err_o' : vld_rel_err_obs,
+            'vld_rel_err_h' : vld_rel_err_hid
+            })
+        results = results.append(new_results, ignore_index=True)
+        if epoch % 20 == 0:
+            print(header)
+        values  = ''.join(['{:^15.6f}'.format(value) for value in new_results.values])
+        print('{:^5}'.format(epoch) + values)
+        if vld_loss < best_vld_loss:
+            best_vld_loss   = vld_loss
+            torch.save(model.state_dict(), './models')
+        if estop.step(torch.tensor(vld_loss)):
+            print('Early stopping...')
+            break
+
     
