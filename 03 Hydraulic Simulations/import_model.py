@@ -103,6 +103,13 @@ if __name__ == "__main__" :
                         type    = str,
                         help    = "What to visualise: ['sensor_locations','pressure_signals']")
     
+    # Choice of rescaling the timeseries data
+    parser.add_argument('--scaling',
+                        default = 'standard',
+                        choices = ['standard','minmax',None],
+                        type    = str,
+                        help    = "Rescale timeseries data: ['standard','minmax']")
+    
     # Push the passed arguments to the 'args' variable
     args = parser.parse_args()
     
@@ -199,7 +206,6 @@ if __name__ == "__main__" :
         color = cmap(colormap)
         
         # Visualise the the model using our visualisation utility
-        
         axis = visualise(G, pos=pos, color = color, figsize = (60,32), edge_labels=True)
         
         plt.show()
@@ -214,10 +220,10 @@ if __name__ == "__main__" :
     print('Importing SCADA dataset...\n') 
     
     # Load the data into a numpy array with format matching the GraphConvWat problem
-    pressure_2018 = dataLoader(observed_nodes=sensors,
-                               n_nodes=782,
-                               path='./BattLeDIM/',
-                               file='2018_SCADA_Pressures.csv')
+    pressure_2018 = dataLoader(observed_nodes = sensors,
+                               n_nodes        = 782,
+                               path           = './BattLeDIM/',
+                               file           = '2018_SCADA_Pressures.csv')
     
     # Print information and instructions about the imported data
     msg = "The imported sensor data has shape (i,n,d): {}".format(pressure_2018.shape)
@@ -260,13 +266,15 @@ if __name__ == "__main__" :
     """
         
     # Populate feature vector x and label vector y from the nominal pressures
-    x,y = dataCleaner(pressure_df=nominal_pressure,
-                      observed_nodes=sensors)
+    x,y = dataCleaner(pressure_df    = nominal_pressure, # Pass the nodal pressures
+                      observed_nodes = sensors,          # Indicate which nodes have sensors
+                      rescale        = args.scaling)     # Perform scaling on the timeseries data
     
+    # Split the data into training and test sets
     x_train, x_test, y_train, y_test = train_test_split(x,y, 
-                                                        test_size=0.2,
-                                                        random_state=1,
-                                                        shuffle=False)
+                                                        test_size    = 0.2,
+                                                        random_state = 1,
+                                                        shuffle      = False)
     
     # %%
     """

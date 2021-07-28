@@ -15,6 +15,7 @@ Created on Fri Jul 23 15:24:59 2021
 
 import numpy as np
 import pandas as pd
+from sklearn.preprocessing import MinMaxScaler, StandardScaler
 
 # Function to load the timeseries datasets of the BattLeDIM challenge
 def dataLoader(observed_nodes, n_nodes=782, path='./BattLeDIM/', file='2018_SCADA_Pressures.csv'):
@@ -77,7 +78,7 @@ def dataLoader(observed_nodes, n_nodes=782, path='./BattLeDIM/', file='2018_SCAD
     return result
 
 # Function to clean the nominal pressure dataframe 
-def dataCleaner(pressure_df, observed_nodes):
+def dataCleaner(pressure_df, observed_nodes, rescale=None):
     '''
     Function for cleaning the pressure dataframes obtained by simulation of the
     nominal system model supplied with the BattLeDIM competition.
@@ -91,7 +92,9 @@ def dataCleaner(pressure_df, observed_nodes):
             index   (y) = observations
     sensor_list : list of ints
         A list of numerical values indicating the sensors nodal placement..
-
+    scaling : str
+        'standard' - standard scaling
+        'minmax'   - min/max scaling
     Returns
     -------
     x : np.array(n_obs,n_nodes,2)
@@ -111,12 +114,12 @@ def dataCleaner(pressure_df, observed_nodes):
         With this we may train the GNN in a supervised manner.
         
         y =
-        [21.57, 1    <- n1, all values are observed
-         21.89, 1    <- n2, 
-         22.17, 1    <- n3
-         22.43, 1    <- n4
-         23.79, 1    <- n5
-         ...     ]   etc.
+        [21.57    <- n1, all values are observed
+         21.89    <- n2, 
+         22.17    <- n3
+         22.43    <- n4
+         23.79    <- n5
+         ...  ]   etc.
         
     '''     
     # The number of nodes in the passed dataframe
@@ -124,6 +127,21 @@ def dataCleaner(pressure_df, observed_nodes):
     
     # Rename the columns (n1, n2, ...) to numerical values (1, 2, ...)
     pressure_df.columns = [number for number in range(1,n_nodes+1)]
+    
+    # Perform scaling on the initial Pandas Dataframe for brevity
+    # This is less trivial than applying it on the later generated numpy arrays
+    
+    # Standard scale:
+    if rescale == 'standard':
+        scaler      = StandardScaler()
+        pressure_df = pd.DataFrame(scaler.fit_transform(pressure_df), columns=pressure_df.columns)
+    # Min/max scaling (normalising):
+    elif rescale == 'minmax':
+        scaler      = MinMaxScaler()
+        pressure_df = pd.DataFrame(scaler.fit_transform(pressure_df), columns=pressure_df.columns)
+    # Perform no scaling
+    else:
+        pass
     
     # DataFrame where the index is the node number holding the sensor and the value is set to 1
     sensor_df = pd.DataFrame(data=[1 for i in observed_nodes],index=observed_nodes)
@@ -146,8 +164,7 @@ def dataCleaner(pressure_df, observed_nodes):
     x      = np.stack((x_arr,x_mask),axis=2)
     
     # Generating the complete label matrix (y)
-    y_mask = np.ones((n_rows,n_nodes))
     y_arr  = np.array(pressure_df)
-    y      = np.stack((y_arr,y_mask),axis=2)
+    y      = np.stack((y_arr, ),axis=2)
     
     return x,y
