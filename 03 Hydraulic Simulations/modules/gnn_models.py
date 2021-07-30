@@ -66,6 +66,12 @@ class GCN(torch.nn.Module):
         self.bns = None
         
         
+        '''
+        IMPLEMENT PARENT AND CHILDREN CLASS
+        PARENT CLASS HAS TRAINING, EVALUATE, SAVE, LOAD MODEL
+        CHILDREN CLASS HAS VARIOUS DIFFERENT NETWORK SETUPS I.E.
+        CHEBNET / DCRNN ETC ETC ...
+        '''
         
         '''
         CHECK OUT THESE BAD BOYS!
