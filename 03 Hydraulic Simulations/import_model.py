@@ -146,13 +146,17 @@ if __name__ == "__main__" :
     
     # Set the path to the EPANET input file
     if args.wdn == 'ltown':
-        path_to_wdn = './BattLeDIM/L-TOWN.inp' # Do I need to distinguish between REAL and NOMINAL EPANET inps here?        
+        path_to_wdn = './BattLeDIM/L-TOWN.inp' # Do I need to distinguish between REAL and NOMINAL EPANET inps here? 
+        figsize     = (60,32)
     elif args.wdn == 'anytown':
-        path_to_wdn = './water_networks/anytown.inp'   
+        path_to_wdn = './water_networks/anytown.inp'
+        figsize     = (30,16)
     elif args.wdn == 'ctown':
         path_to_wdn = './water_networks/ctown.inp'
+        figsize     = (60,32)
     elif args.wdn == 'richmond':
         path_to_wdn = './water_networks/richmond.inp'
+        figsize     = (60,32)
     else:
         print('Unknown WDN, exiting')
         exit()
@@ -194,6 +198,12 @@ if __name__ == "__main__" :
     # at which a  pressure sensor is present
     sensors = [int(string.replace("n", "")) for string in config['pressure_sensors']]
     
+    # -------------
+    # Revise this !
+    # -------------
+    
+    if args.wdn == 'anytown':
+        sensors = [1, 5, 10, 15, 20]
     
     #%% Visualise the created graph
     
@@ -216,7 +226,7 @@ if __name__ == "__main__" :
         
         # Plot the location of the pressure sensors
         elif args.visualiseWhat == 'sensor_location':
-            colormap = pd.Series([1.0 if i in sensors else 0.0 for i in range(1,783)])
+            colormap = pd.Series([1.0 if i in sensors else 0.0 for i in range(1,G.number_of_nodes()+1)])
         
         # Generate a colormap
         cmap  = plt.get_cmap('coolwarm')
@@ -225,7 +235,7 @@ if __name__ == "__main__" :
         color = cmap(colormap)
         
         # Visualise the the model using our visualisation utility
-        axis = visualise(G, pos=pos, color = color, figsize = (60,32), edge_labels=True)
+        axis = visualise(G, pos=pos, color = color, figsize = figsize, edge_labels=True)
         
         plt.show()
 
@@ -245,25 +255,26 @@ if __name__ == "__main__" :
     6.   I M P O R T   S C A D A   D A T A 
     '''
     
-    print('Importing SCADA dataset...\n') 
-    
-    # Load the data into a numpy array with format matching the GraphConvWat problem
-    pressure_2018 = battledimLoader(observed_nodes = sensors,
-                                    n_nodes        = 782,
-                                    path           = './BattLeDIM/',
-                                    file           = '2018_SCADA_Pressures.csv')
-    
-    # Print information and instructions about the imported data
-    msg = "The imported sensor data has shape (i,n,d): {}".format(pressure_2018.shape)
-    
-    print(msg + "\n" + len(msg)*"-" + "\n")
-    print("Where: ")
-    print("'i' is the number of observations: {}".format(pressure_2018.shape[0]))
-    print("'n' is the number of nodes: {}".format(pressure_2018.shape[1]))
-    print("'d' is a {}-dimensional vector consisting of the pressure value and a mask ".format(pressure_2018.shape[2]))
-    print("The mask is set to '1' on observed nodes and '0' otherwise\n")
-    
-    print("\n" + len(msg)*"-" + "\n")
+    if args.wdn == 'ltown':
+        print('Importing SCADA dataset...\n') 
+        
+        # Load the data into a numpy array with format matching the GraphConvWat problem
+        pressure_2018 = battledimLoader(observed_nodes = sensors,
+                                        n_nodes        = 782,
+                                        path           = './BattLeDIM/',
+                                        file           = '2018_SCADA_Pressures.csv')
+        
+        # Print information and instructions about the imported data
+        msg = "The imported sensor data has shape (i,n,d): {}".format(pressure_2018.shape)
+        
+        print(msg + "\n" + len(msg)*"-" + "\n")
+        print("Where: ")
+        print("'i' is the number of observations: {}".format(pressure_2018.shape[0]))
+        print("'n' is the number of nodes: {}".format(pressure_2018.shape[1]))
+        print("'d' is a {}-dimensional vector consisting of the pressure value and a mask ".format(pressure_2018.shape[2]))
+        print("The mask is set to '1' on observed nodes and '0' otherwise\n")
+        
+        print("\n" + len(msg)*"-" + "\n")
     
     #%% Generate the nominal pressure data from an EPANET simulation
     
@@ -310,7 +321,7 @@ if __name__ == "__main__" :
     '''
     9. C O N V E R T   P H Y S I C A L   G R A P H   T O    C O M P U T A T I O N   G R A P H 
     '''
-    def train_one_epoch(trn_gnrtr):
+    def train_one_epoch():
         model.train()
         total_loss  = 0
         for batch in trn_gnrtr:
@@ -321,7 +332,7 @@ if __name__ == "__main__" :
             loss.backward()
             optimizer.step()
             total_loss  += loss.item() * batch.num_graphs
-        return total_loss / len(trn_gnrtr.dataset)
+        return (total_loss / len(trn_gnrtr.dataset)), out
     
     def eval_metrics(generator):
         model.eval()
@@ -371,9 +382,9 @@ if __name__ == "__main__" :
     
     model = ChebNet(np.shape(x_trn)[-1], np.shape(y_trn)[-1]).to(device)
     
-    optimizer = torch.optim.Adam([dict(params=model.conv1.parameters(), weight_decay=args.decay),
-                                  dict(params=model.conv2.parameters(), weight_decay=args.decay),
-                                  dict(params=model.conv3.parameters(), weight_decay=args.decay),
+    optimizer = torch.optim.Adam([dict(params=model.conv1.parameters(), weight_decay=decay),
+                                  dict(params=model.conv2.parameters(), weight_decay=decay),
+                                  dict(params=model.conv3.parameters(), weight_decay=decay),
                                   dict(params=model.conv4.parameters(), weight_decay=0)],
                                   lr  = learning_rate,
                                   eps = 1e-7)
@@ -390,8 +401,8 @@ if __name__ == "__main__" :
     ])
     header  = ''.join(['{:^15}'.format(colname) for colname in results.columns])
     header  = '{:^5}'.format('epoch') + header
-    for epoch in range(0, args.epoch):
-        trn_loss    = train_one_epoch()
+    for epoch in range(0, epochs):
+        trn_loss, y_pred = train_one_epoch()
         vld_loss, vld_rel_err, vld_rel_err_obs, vld_rel_err_hid = eval_metrics(val_gnrtr)
         new_results = pd.Series({
             'trn_loss'      : trn_loss,
@@ -407,9 +418,7 @@ if __name__ == "__main__" :
         print('{:^5}'.format(epoch) + values)
         if vld_loss < best_vld_loss:
             best_vld_loss   = vld_loss
-            torch.save(model.state_dict(), './models')
+            torch.save(model.state_dict(), './models/best_model.pt')
         if estop.step(torch.tensor(vld_loss)):
             print('Early stopping...')
             break
-
-    

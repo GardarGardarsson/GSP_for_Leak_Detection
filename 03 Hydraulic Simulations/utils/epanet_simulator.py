@@ -71,7 +71,10 @@ class epanetSimulator:
 
     # Pressure getter
     def get_simulated_pressure(self):
-        self.pressure = self.results.node['pressure'].drop(columns=['R1','R2','T1'])
+        if 'R1' and 'R2' and 'T1' in self.results.node['pressure'].columns:
+            self.pressure = self.results.node['pressure'].drop(columns=['R1','R2','T1'])
+        else:
+            self.pressure = self.results.node['pressure']
         return self.pressure
 
     # Demand getter
