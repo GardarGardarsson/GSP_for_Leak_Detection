@@ -216,8 +216,12 @@ if __name__ == "__main__" :
         
         # Get the sensor positions
         sensors = np.where(x_trn[0,:,1]>0)[0]
+        
         # First node is enumerated 1 not 0 so:
         sensors += np.ones(shape=sensors.shape, dtype=int).tolist()
+        
+        scale_y = np.std(y_trn)
+        bias_y  = np.mean(y_trn)
 
         
     #%% Visualise the created graph
@@ -338,6 +342,83 @@ if __name__ == "__main__" :
                                                       shuffle      = False)
      
         
+    #%% Load the nominal pressure data and prepare for training
+    
+    '''
+    9. C O N V E R T   P H Y S I C A L   G R A P H   T O    C O M P U T A T I O N   G R A P H   
+    '''
+    
+    # ----------------
+    # Hyper-parameters
+    # ----------------
+    batch_size    = 40
+    learning_rate = 3e-4
+    decay         = 6e-6
+    shuffle       = False
+    epochs        = 5
+    
+    # --------------
+    # Training setup
+    # --------------
+    device    = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    
+    # Instantiate training and test set data generators
+    trn_gnrtr = dataGenerator(G, x_trn, y_trn, batch_size, shuffle)
+    val_gnrtr = dataGenerator(G, x_val, y_val, batch_size, shuffle)
+    
+    # Instantiate a Chebysev Network GNN model
+    model     = ChebNet(name           = 'ChebNet',
+                        data_generator = trn_gnrtr,
+                        device         = device, 
+                        in_channels    = np.shape(x_trn)[-1], 
+                        out_channels   = np.shape(y_trn)[-1],
+                        data_scale     = scale_y, 
+                        data_bias      = bias_y).to(device)
+    
+    # Instantiate an optimizer
+    optimizer = torch.optim.Adam([dict(params=model.conv1.parameters(), weight_decay=decay),
+                                  dict(params=model.conv2.parameters(), weight_decay=decay),
+                                  dict(params=model.conv3.parameters(), weight_decay=decay),
+                                  dict(params=model.conv4.parameters(), weight_decay=0)],
+                                  lr  = learning_rate,
+                                  eps = 1e-7)
+    
+    # Configure an early stopping callback
+    estop    = EarlyStopping(min_delta=.00001, patience=30)
+    
+    # Initialise the best validation loss for saving the best model
+    best_val_loss = np.inf
+    
+    # Train for the predefined number of epochs
+    for epoch in range(1, epochs+1):
+        
+        # Start a stopwatch timer
+        start_time = time.time()
+        
+        # Train a single epoch, passing the optimizer and current epoch number
+        model.train_one_epoch(optimizer     = optimizer,
+                              current_epoch = epoch)
+        
+        # Validate the model after the gradient update
+        model.validate()
+        
+        # Update the model results for the current epoch
+        model.update_results()
+        
+        # Print stats for the epoch and the execution time
+        model.print_stats(time.time() - start_time)
+        
+        # If this is the best model
+        if model.val_loss < best_val_loss:
+            # We save it
+            torch.save(model.state_dict(), './models/best_model.pt')
+        
+        # If model is not improving
+        if estop.step(torch.tensor(model.val_loss)):
+            print('Early stopping activated...')
+            break
+    
+    
     #%% Convert the graph to a computation graph
     
     '''

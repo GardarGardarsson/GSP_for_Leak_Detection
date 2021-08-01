@@ -2,18 +2,13 @@
 import torch
 
 class Metrics():
+    
     def __init__(self, bias, scale, device):
         self.bias   = torch.tensor(bias).to(device)
         self.scale  = torch.tensor(scale).to(device)
 
     def _rescale(self, data):
-        return torch.add(
-                torch.multiply(
-                    data,
-                    self.scale
-                    ),
-                self.bias
-                )
+        return torch.add(torch.multiply(data,self.scale) , self.bias)
 
     def rel_err(self, y_pred, y_true, mask=None):
         if mask is None:
