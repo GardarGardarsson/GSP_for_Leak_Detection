@@ -17,8 +17,10 @@ class Metrics():
         else:
             y_pred  = torch.masked_select(y_pred[:, 0], mask)
             y_true  = torch.masked_select(y_true[:, 0], mask)
+            
         y_pred  = self._rescale(y_pred)
         y_true  = self._rescale(y_true)
         err     = torch.subtract(y_true, y_pred)
         rel_err = torch.abs(torch.divide(err, y_true))
+        
         return torch.mean(rel_err)

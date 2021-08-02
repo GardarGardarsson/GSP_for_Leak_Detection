@@ -29,10 +29,13 @@ import pandas as pd
 class epanetSimulator:
     
     # Initialise class
-    def __init__(self, epanet_file_path):
+    def __init__(self, epanet_file_path, data_path):
         
         # Initialise filepath into self
         self.epanet_file_path = epanet_file_path
+        
+        # Initialise datapath into self, this is where simulation 'turds' are stored
+        self.data_path = data_path
         
         # Load the EPANET model at the given path
         self.model = wntr.network.WaterNetworkModel(epanet_file_path)
@@ -44,7 +47,7 @@ class epanetSimulator:
         self.sim = wntr.sim.EpanetSimulator(self.model)
         
         # Run the simulation
-        self.results = self.sim.run_sim(file_prefix='epanetSimulatorTemp')
+        self.results = self.sim.run_sim(file_prefix=self.data_path+'epanetSimulatorTemp')
         
         # Pass the results
         return self.results

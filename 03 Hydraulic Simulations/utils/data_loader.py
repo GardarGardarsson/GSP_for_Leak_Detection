@@ -20,7 +20,7 @@ import networkx as nx
 from torch_geometric.data import DataLoader
 from torch_geometric.utils import from_networkx
 
-from sklearn.preprocessing import MinMaxScaler, StandardScaler
+from sklearn.preprocessing import MinMaxScaler
 
 # Function to load the timeseries datasets of the BattLeDIM challenge
 def battledimLoader(observed_nodes, n_nodes=782, path='./BattLeDIM/', file='2018_SCADA_Pressures.csv'):
@@ -138,15 +138,25 @@ def dataCleaner(pressure_df, observed_nodes, rescale=None):
     
     # Standard scale:
     if rescale == 'standard':
-        scaler      = StandardScaler()
-        pressure_df = pd.DataFrame(scaler.fit_transform(pressure_df), columns=pressure_df.columns)
+        _avg        = pressure_df.stack().mean()        # Calc. avg. over entire df.
+        _std        = pressure_df.stack().std(ddof=0)   # Calc. std.. over entire df.
+        bias        = _avg                              # Avg. is the scaling bias
+        scale       = _std                              # Std.dev. is the scaling range
+        pressure_df = (pressure_df - bias) / scale      # Scale to range
+        
     # Min/max scaling (normalising):
     elif rescale == 'minmax':
-        scaler      = MinMaxScaler()
-        pressure_df = pd.DataFrame(scaler.fit_transform(pressure_df), columns=pressure_df.columns)
+        _min        = min(pressure_df.min())            # Find the absolute minimum value 
+        _max        = max(pressure_df.max())            # Find the absolute maximum value
+        _rng        = _max - _min                       # Calculate the difference between (range)
+        bias        = _min                              # Scaling bias is the min value
+        scale       = _rng                              # Scaling range is the min-max range
+        pressure_df = (pressure_df - bias) / scale      # Scale to range
+        
     # Perform no scaling
     else:
-        pass
+        bias        = None
+        scale       = None
     
     # DataFrame where the index is the node number holding the sensor and the value is set to 1
     sensor_df = pd.DataFrame(data=[1 for i in observed_nodes],index=observed_nodes)
@@ -172,7 +182,7 @@ def dataCleaner(pressure_df, observed_nodes, rescale=None):
     y_arr  = np.array(pressure_df)
     y      = np.stack((y_arr, ),axis=2)
     
-    return x,y
+    return x,y,scale,bias
 
 # Function that embeds the x-y labels on the graph and returns a DataLoader obj.
 def dataGenerator(G, features, labels, batch_size, shuffle):

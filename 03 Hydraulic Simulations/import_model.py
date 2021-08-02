@@ -22,6 +22,9 @@ Created on Mon Jul  5 18:47:11 2021
 # Operating system specific functions
 import os
 
+# Time for stopwatch functionality during training
+import time
+
 # Argument parser, for configuring the program execution
 import argparse
 
@@ -78,11 +81,8 @@ from utils.data_loader import battledimLoader, dataCleaner, dataGenerator
 # PyTorch early stopping callback
 from utils.early_stopping import EarlyStopping
 
-# Metrics
-from utils.metrics import Metrics
-
 # GNN model library
-from modules.gnn_models import ChebNet
+from modules.torch_gnn import ChebNet
 
 
 #%% Parse arguments
@@ -103,14 +103,21 @@ if __name__ == "__main__" :
     # Configure the argparser:
     # Choice of water-distribution network to work with
     parser.add_argument('--wdn',
-                        default = 'ltown',
-                        choices = ['ltown','anytown','ctown','richmond'],
+                        default = 'anytown',
+                        choices = ['l-town','anytown','ctown','richmond'],
                         type    = str,
-                        help    = "Choose WDN: ['ltown', 'anytown', 'ctown', 'richmond']")
+                        help    = "Choose WDN: ['l-town', 'anytown', 'ctown', 'richmond']")
+    
+    # Choice of GNN model
+    parser.add_argument('--gnn',
+                        default = 'chebnet',
+                        choices = ['chebnet','dcrnn','gcn'],
+                        type    = str,
+                        help    = "Choose GNN: ['chebnet','dcrnn','gcn']")
     
     # Choice of visualising the created graph
     parser.add_argument('--visualise',
-                        default = 'no',
+                        default = 'yes',
                         choices = ['yes','no'],
                         type    = str,
                         help    = "Visualise graph after import? 'yes' / 'no' ")
@@ -121,13 +128,19 @@ if __name__ == "__main__" :
                         choices = ['sensor_location','pressure_signals'],
                         type    = str,
                         help    = "What to visualise: ['sensor_locations','pressure_signals']")
-    
+        
     # Choice of rescaling the timeseries data
     parser.add_argument('--scaling',
-                        default = 'standard',
+                        default = 'minmax',
                         choices = ['standard','minmax',None],
                         type    = str,
                         help    = "Rescale timeseries data: ['standard','minmax']")
+                        
+    # Add a custom descriptive tag
+    parser.add_argument('--tag',
+                        default = 'tag',
+                        type    = str,
+                        help    = "Add a custom, descriptive tag")
     
     # Push the passed arguments to the 'args' variable
     args = parser.parse_args()
@@ -136,7 +149,7 @@ if __name__ == "__main__" :
     print("\nArguments for session: \n" + 22*"-" + "\n{}".format(args) + "\n")
     
     
-    #%%n Set the filepaths for the execution
+    #%% Set the filepaths for the execution
     
     '''
     2.   C O N F I G U R E   E X E C U T I O N   -   P A T H S
@@ -144,22 +157,36 @@ if __name__ == "__main__" :
     
     print('Setting environment paths...\n')
     
-    # Set the path to the EPANET input file
-    if args.wdn == 'ltown':
-        path_to_wdn = './BattLeDIM/L-TOWN.inp' # Do I need to distinguish between REAL and NOMINAL EPANET inps here? 
-        figsize     = (60,32)
-    elif args.wdn == 'anytown':
-        path_to_wdn = './water_networks/anytown.inp'
-        figsize     = (30,16)
-    elif args.wdn == 'ctown':
-        path_to_wdn = './water_networks/ctown.inp'
-        figsize     = (60,32)
-    elif args.wdn == 'richmond':
-        path_to_wdn = './water_networks/richmond.inp'
-        figsize     = (60,32)
-    else:
-        print('Unknown WDN, exiting')
-        exit()
+    # ---------------
+    # Configure paths
+    # ---------------
+    
+    path_to_data   = './data/' + args.wdn + '-data/'       # Datasets are stored here
+    path_to_wdn    = './data/' + args.wdn.upper() + '.inp' # EPANET input file
+    path_to_logs   = './studies/logs/'                     # Log directory
+    path_to_figs   = './studies/figs/'                     # Figure directory
+    path_to_models = './studies/models/'                   # Saved models directory
+    
+    execution_no   = 1                                                                  # Initialise execution ID number
+    execution_id   = args.wdn + '-' + args.gnn + '-' + args.tag + '-'                   # Initialise execution ID name
+    logs           = [log for log in os.listdir(path_to_logs) if log.endswith('.csv')]  # Load all logs in directory to list
+    
+    while execution_id + str(execution_no) + '.csv' in logs:    # For every matching file name in the directory
+        execution_no += 1                                       # Increment the execution id number
+    
+    execution_id   = execution_id + str(execution_no)           # Update the execution ID
+    
+    model_path  = './studies/models/' + execution_id + '.pt'    # Generate complete model path w/ filename
+    log_path    = './studies/logs/'   + execution_id + '.csv'   # Generate complete log path w/ filename
+    
+    # -------------------
+    # Adjust figure sizes
+    # -------------------
+    
+    if args.wdn == 'anytown':   # Anytown is a very small network ...
+        figsize     = (30,16)   # ... and thus requires a small frame
+    else:                        # The rest however require a hi-res...
+       figsize     = (60,32)   # ... if they are to be readible
     
     #%% Convert EPANET hydraulic model to networkx graph
     
@@ -186,18 +213,20 @@ if __name__ == "__main__" :
     4.   I M P O R T   D A T A S E T   C O N F I G
     '''
     
-    print('Importing dataset configuration...\n')
-    
-    # Open the dataset configuration file
-    with open('./BattLeDIM/dataset_configuration.yml') as file:
+    if args.wdn == 'l-town':
         
-        # Load the configuration to a dictionary
-        config = yaml.load(file, Loader=yaml.FullLoader) 
-    
-    # Generate a list of integers, indicating the number of the node
-    # at which a  pressure sensor is present
-    sensors = [int(string.replace("n", "")) for string in config['pressure_sensors']]
-    
+        print('Importing dataset configuration...\n')
+        
+        # Open the dataset configuration file
+        with open(path_to_data + 'dataset_configuration.yml') as file:
+            
+            # Load the configuration to a dictionary
+            config = yaml.load(file, Loader=yaml.FullLoader) 
+        
+        # Generate a list of integers, indicating the number of the node
+        # at which a  pressure sensor is present
+        sensors = [int(string.replace("n", "")) for string in config['pressure_sensors']]
+        
     # -------------
     # Revise this !
     # -------------
@@ -209,10 +238,17 @@ if __name__ == "__main__" :
         # Load the training timeseries data 
         # This was generated by running the 'generate_dta.py' script for
         # the 'anytown.inp' of the GraphConvWat project of G. Hajgató et al.
-        x_trn = np.load('./water_networks/anytown_data/trn_x.npy')
-        y_trn = np.load('./water_networks/anytown_data/trn_y.npy')
-        x_val = np.load('./water_networks/anytown_data/vld_x.npy')
-        y_val = np.load('./water_networks/anytown_data/vld_y.npy')
+        x_trn = np.load(path_to_data + 'trn_x.npy')
+        y_trn = np.load(path_to_data + 'trn_y.npy')
+        x_val = np.load(path_to_data + 'vld_x.npy')
+        y_val = np.load(path_to_data + 'vld_y.npy')
+        x_tst = np.load(path_to_data + 'tst_x.npy')
+        y_tst = np.load(path_to_data + 'tst_y.npy')
+        
+        # Note, it's been scaled so we need the scale and bias to transform
+        # it back to the original signal
+        scale = np.load(path_to_data + 'scale.npy')
+        bias  = np.load(path_to_data + 'bias.npy')
         
         # Get the sensor positions
         sensors = np.where(x_trn[0,:,1]>0)[0]
@@ -220,9 +256,6 @@ if __name__ == "__main__" :
         # First node is enumerated 1 not 0 so:
         sensors += np.ones(shape=sensors.shape, dtype=int).tolist()
         
-        scale_y = np.std(y_trn)
-        bias_y  = np.mean(y_trn)
-
         
     #%% Visualise the created graph
     
@@ -245,6 +278,8 @@ if __name__ == "__main__" :
         
         # Plot the location of the pressure sensors
         elif args.visualiseWhat == 'sensor_location':
+            
+            # Set pressure sensors as 1 and unobserved nodes as 0
             colormap = pd.Series([1.0 if i in sensors else 0.0 for i in range(1,G.number_of_nodes()+1)])
         
         # Generate a colormap
@@ -257,7 +292,9 @@ if __name__ == "__main__" :
         axis = visualise(G, pos=pos, color = color, figsize = figsize, edge_labels=True)
         
         plt.show()
-
+        plt.savefig(path_to_figs + execution_id + '.png')
+    
+    print('Calculating graph diameter...\n')
     # We may want to find the largest subgraph diameter
     largest_subgraph_diameter = 0
     
@@ -274,14 +311,14 @@ if __name__ == "__main__" :
     6.   I M P O R T   S C A D A   D A T A 
     '''
     
-    if args.wdn == 'ltown':
+    if args.wdn == 'l-town':
         
         print('Importing SCADA dataset...\n') 
         
         # Load the data into a numpy array with format matching the GraphConvWat problem
         pressure_2018 = battledimLoader(observed_nodes = sensors,
                                         n_nodes        = 782,
-                                        path           = './BattLeDIM/',
+                                        path           = path_to_data,
                                         file           = '2018_SCADA_Pressures.csv')
         
         # Print information and instructions about the imported data
@@ -292,7 +329,7 @@ if __name__ == "__main__" :
         print("'i' is the number of observations: {}".format(pressure_2018.shape[0]))
         print("'n' is the number of nodes: {}".format(pressure_2018.shape[1]))
         print("'d' is a {}-dimensional vector consisting of the pressure value and a mask ".format(pressure_2018.shape[2]))
-        print("The mask is set to '1' on observed nodes and '0' otherwise\n")
+        print("The mask is set to '1' on observed nodes and '0' otherwise")
         
         print("\n" + len(msg)*"-" + "\n")
     
@@ -302,7 +339,7 @@ if __name__ == "__main__" :
     7.   G E N E R A T E   N O M I N A L   D A T A
     '''
     
-    if args.wdn =='ltown':
+    if args.wdn =='l-town':
         
         print('Running EPANET simulation to generate nominal pressure data...\n') 
         
@@ -312,7 +349,7 @@ if __name__ == "__main__" :
         # nodes in the network, on which the GNN algorithm is to be trained.
         
         # Instantiate the nominal WDN model
-        nominal_wdn_model = epanetSimulator(path_to_wdn)
+        nominal_wdn_model = epanetSimulator(path_to_wdn, path_to_data)
     
         # Run a simulation
         nominal_wdn_model.simulate()
@@ -326,14 +363,17 @@ if __name__ == "__main__" :
     8.   P R E P A R E   T R A I N I N G   D A T A    
     '''
     
-    if args.wdn == 'ltown':    
+    if args.wdn == 'l-town':    
     
         print('Pre-processing nominal pressure data for training...\n')     
     
         # Populate feature vector x and label vector y from the nominal pressures
-        x,y = dataCleaner(pressure_df    = nominal_pressure, # Pass the nodal pressures
-                          observed_nodes = sensors,          # Indicate which nodes have sensors
-                          rescale        = args.scaling)     # Perform scaling on the timeseries data
+        # Also retrieve the scale and bias of the scaling transformation
+        # This is so we can inverse transform the predicted values to calculate
+        # relative reconstruction errors
+        x,y,scale,bias = dataCleaner(pressure_df    = nominal_pressure, # Pass the nodal pressures
+                                     observed_nodes = sensors,          # Indicate which nodes have sensors
+                                     rescale        = args.scaling)     # Perform scaling on the timeseries data
         
         # Split the data into training and validation sets
         x_trn, x_val, y_trn, y_val = train_test_split(x, y, 
@@ -345,8 +385,10 @@ if __name__ == "__main__" :
     #%% Load the nominal pressure data and prepare for training
     
     '''
-    9. C O N V E R T   P H Y S I C A L   G R A P H   T O    C O M P U T A T I O N   G R A P H   
+    9.   S E T U P   F O R   T R A I N I N G 
     '''
+    
+    print('Setting up training session and creating model...\n')
     
     # ----------------
     # Hyper-parameters
@@ -355,7 +397,7 @@ if __name__ == "__main__" :
     learning_rate = 3e-4
     decay         = 6e-6
     shuffle       = False
-    epochs        = 5
+    epochs        = 100
     
     # --------------
     # Training setup
@@ -372,8 +414,8 @@ if __name__ == "__main__" :
                         device         = device, 
                         in_channels    = np.shape(x_trn)[-1], 
                         out_channels   = np.shape(y_trn)[-1],
-                        data_scale     = scale_y, 
-                        data_bias      = bias_y).to(device)
+                        data_scale     = scale, 
+                        data_bias      = bias).to(device)
     
     # Instantiate an optimizer
     optimizer = torch.optim.Adam([dict(params=model.conv1.parameters(), weight_decay=decay),
@@ -388,6 +430,14 @@ if __name__ == "__main__" :
     
     # Initialise the best validation loss for saving the best model
     best_val_loss = np.inf
+    
+    #%% Train the model
+    
+    '''
+    10.   T R A I N 
+    '''
+    
+    print("Training starting...\n")
     
     # Train for the predefined number of epochs
     for epoch in range(1, epochs+1):
@@ -411,117 +461,61 @@ if __name__ == "__main__" :
         # If this is the best model
         if model.val_loss < best_val_loss:
             # We save it
-            torch.save(model.state_dict(), './models/best_model.pt')
+            torch.save(model.state_dict(), model_path)
         
         # If model is not improving
         if estop.step(torch.tensor(model.val_loss)):
             print('Early stopping activated...')
             break
     
-    
-    #%% Convert the graph to a computation graph
+    #%% Save training results
     
     '''
-    9. C O N V E R T   P H Y S I C A L   G R A P H   T O    C O M P U T A T I O N   G R A P H 
+    11.   S A V E   R E S U L T S
     '''
-    def train_one_epoch():
-        model.train()
-        total_loss  = 0
-        for batch in trn_gnrtr:
-            batch   = batch.to(device)
-            optimizer.zero_grad()
-            out     = model(batch)
-            loss    = torch.nn.functional.mse_loss(out, batch.y)
-            loss.backward()
-            optimizer.step()
-            total_loss  += loss.item() * batch.num_graphs
-        return (total_loss / len(trn_gnrtr.dataset)), out
     
-    def eval_metrics(generator):
-        model.eval()
-        n   = len(generator.dataset)
-        tot_loss        = 0
-        tot_rel_err     = 0
-        tot_rel_err_obs = 0
-        tot_rel_err_hid = 0
-        for batch in generator:
-            batch   = batch.to(device)
-            out     = model(batch)
-            loss    = torch.nn.functional.mse_loss(out, batch.y)
-            rel_err = metrics.rel_err(out, batch.y)
-            rel_err_obs = metrics.rel_err(
-                out,
-                batch.y,
-                batch.x[:, -1].type(torch.bool)
-                )
-            rel_err_hid = metrics.rel_err(
-                out,
-                batch.y,
-                ~batch.x[:, -1].type(torch.bool)
-                )
-            tot_loss        += loss.item() * batch.num_graphs
-            tot_rel_err     += rel_err.item() * batch.num_graphs
-            tot_rel_err_obs += rel_err_obs.item() * batch.num_graphs
-            tot_rel_err_hid += rel_err_hid.item() * batch.num_graphs
-        loss        = tot_loss / n
-        rel_err     = tot_rel_err / n
-        rel_err_obs = tot_rel_err_obs / n
-        rel_err_hid = tot_rel_err_hid / n
-        return loss, rel_err, rel_err_obs, rel_err_hid
+    print("Saving training results to '{}'...\n".format(log_path))
     
-    # ----------------
-    # Hyper-parameters
-    # ----------------
-    batch_size    = 40
-    learning_rate = 3e-4
-    decay         = 6e-6
-    shuffle       = False
-    epochs        = 100
+    model.results.to_csv(log_path)
     
-    # Instantiate the data generators
-    trn_gnrtr = dataGenerator(G, x_trn, y_trn, batch_size, shuffle)
-    val_gnrtr = dataGenerator(G, x_val, y_val, batch_size, shuffle)
+    # %%
     
     
-    model = ChebNet(np.shape(x_trn)[-1], np.shape(y_trn)[-1]).to(device)
+    def dataProcessor(G, features):
+        graph  = from_networkx(G)
+        graph.x= torch.Tensor(features)
+        return graph
     
-    optimizer = torch.optim.Adam([dict(params=model.conv1.parameters(), weight_decay=decay),
-                                  dict(params=model.conv2.parameters(), weight_decay=decay),
-                                  dict(params=model.conv3.parameters(), weight_decay=decay),
-                                  dict(params=model.conv4.parameters(), weight_decay=0)],
-                                  lr  = learning_rate,
-                                  eps = 1e-7)
-    estop   = EarlyStopping(min_delta=.00001, patience=30)
+    def rescaleSignal(signal, scale, bias):
+        return((np.dot(signal,scale))+bias)
     
-    if args.scaling == 'standard':
-        scale_y = np.std(y_trn)
-        bias_y  = np.mean(y_trn)
-        
-    metrics = Metrics(bias_y, scale_y, device)
-    best_val_loss   = np.inf
-    results = pd.DataFrame(columns=[
-    'trn_loss', 'vld_loss', 'vld_rel_err', 'vld_rel_err_o', 'vld_rel_err_h'
-    ])
-    header  = ''.join(['{:^15}'.format(colname) for colname in results.columns])
-    header  = '{:^5}'.format('epoch') + header
-    for epoch in range(0, epochs):
-        trn_loss, y_pred = train_one_epoch()
-        val_loss, val_rel_err, val_rel_err_obs, val_rel_err_hid = eval_metrics(val_gnrtr)
-        new_results = pd.Series({
-            'trn_loss'      : trn_loss,
-            'val_loss'      : val_loss,
-            'val_rel_err'   : val_rel_err,
-            'val_rel_err_o' : val_rel_err_obs,
-            'val_rel_err_h' : val_rel_err_hid
-            })
-        results = results.append(new_results, ignore_index=True)
-        if epoch % 20 == 0:
-            print(header)
-        values  = ''.join(['{:^15.6f}'.format(value) for value in new_results.values])
-        print('{:^5}'.format(epoch) + values)
-        if val_loss < best_val_loss:
-            best_val_loss   = val_loss
-            torch.save(model.state_dict(), './models/best_model.pt')
-        if estop.step(torch.tensor(val_loss)):
-            print('Early stopping...')
-            break
+    n_nodes              = x_tst[5].shape[0]
+    partial_graph_signal = x_tst[5] 
+    gnn_input            = dataProcessor(G, partial_graph_signal)
+    pred_graph_signal    = model(gnn_input).detach().numpy().reshape(n_nodes,)
+    real_graph_signal    = y_tst[5].reshape(n_nodes,)
+    
+    cmap      = plt.get_cmap('hot')
+    part_cmap = cmap(partial_graph_signal[:,0])
+    real_cmap = cmap(real_graph_signal)
+    pred_cmap = cmap(pred_graph_signal)
+    
+    # %%
+    
+    fig, ax = plt.subplots(nrows=1, ncols=3, figsize=(30,8), dpi=200, sharex=True, sharey=True)
+    
+    # Visualise the the model using our visualisation utility
+    ax[0] = visualise(G, pos=pos, color=part_cmap, figsize=figsize, edge_labels=True, axis=ax[0], cmap=part_cmap)
+    ax[1] = visualise(G, pos=pos, color=pred_cmap, figsize=figsize, edge_labels=True, axis=ax[1])
+    ax[2] = visualise(G, pos=pos, color=real_cmap, figsize=figsize, edge_labels=True, axis=ax[2])
+    
+    ax[0].set_title('Input',        fontsize='xx-large')
+    ax[1].set_title('Prediction',   fontsize='xx-large')
+    ax[2].set_title('True signal',  fontsize='xx-large')
+    
+    plt.suptitle("{} after {} epochs\n Sensors at nodes: {}".format(model.name, model.epoch,sensors), fontsize='xx-large')
+    cmap=plt.get_cmap('hot')
+    sm = plt.cm.ScalarMappable(cmap=cmap)
+    sm._A = []
+    plt.colorbar(sm, ax=ax.ravel().tolist())
+    plt.show()
