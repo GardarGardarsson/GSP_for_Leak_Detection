@@ -1,6 +1,13 @@
 Packages of the environment GSP were installed in the following order:
 
 conda install pytorch torchvision torchaudio -c pytorch
+
+!!!
+On GPU servers with sm_80 (e.g. A100 GPU servers) you need cudatoolkit 11.1 so do:
+
+conda install pytorch torchvision torchaudio cudatoolkit=11.1 -c pytorch -c nvidia
+!!!
+
 conda install pytorch-geometric -c rusty1s -c conda-forge
 pip install epynet
 pip install wntr
