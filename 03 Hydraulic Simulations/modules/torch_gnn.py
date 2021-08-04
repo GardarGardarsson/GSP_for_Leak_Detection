@@ -290,8 +290,15 @@ class _GNNbase(torch.nn.Module):
         Updates the model weights and self-contained stats
 
         '''
-        self.load_state_dict(torch.load(path_to_model)) # Load state dict
-        self.load_results(path_to_logs)                 # Load the results from previous training and update self stats
+        # Since we're loading models across compute architectures (gpu/cpu) we need to do some mapping
+        # We assume all models are either saved from GPU and loaded on CPU, or trained on GPU and loaded on GPU
+        # We don't account for the special case where a model is saved from a CPU and loaded to a GPU, so:
+        # (... hang on, what about CPU->CPU, will this work?)
+        if self.device == torch.device('cpu'):                                        # If we're running a CPU
+            self.load_state_dict(torch.load(path_to_model, map_location=self.device)) # We map GPU->CPU
+        else:                                                                         # If we're running a GPU
+            self.load_state_dict(torch.load(path_to_model))                           # We just load directly
+        self.load_results(path_to_logs)                                               # Load the results from previous training and update self stats
         
     def print_stats(self, epoch_time):
         '''

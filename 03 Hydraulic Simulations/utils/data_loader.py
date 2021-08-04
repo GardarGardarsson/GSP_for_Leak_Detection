@@ -23,7 +23,7 @@ from torch_geometric.utils import from_networkx
 from sklearn.preprocessing import MinMaxScaler
 
 # Function to load the timeseries datasets of the BattLeDIM challenge
-def battledimLoader(observed_nodes, n_nodes=782, path='./BattLeDIM/', file='2018_SCADA_Pressures.csv'):
+def battledimLoader(observed_nodes, n_nodes=782, path='./BattLeDIM/', file='2018_SCADA_Pressures.csv', rescale=False, scale=None, bias=None):
     '''
     Function for loading the SCADA .csv datasets of the BattLeDIM competition
     and returning it in a dataformat suitable for the GNN model to ingest.
@@ -66,10 +66,14 @@ def battledimLoader(observed_nodes, n_nodes=782, path='./BattLeDIM/', file='2018
     # which states what nodes of the graphs are observed
     df.columns = observed_nodes
     
+    # User has option of rescaling the imported data
+    if rescale:
+        df = (df - bias) / scale
+    
     # Generate a temporary image of the DataFrame, that's been filled with zeros
     # at the un-observed nodes
     temp = df.T.reindex(list(range(1,n_nodes+1)),fill_value=0.0)
-    
+        
     # Create a "mask" array, that's set to 1 at the observed nodes and 0 otherwise
     arr2 = np.array(temp.mask(temp>0.0,1).astype('int'))
 

@@ -201,7 +201,7 @@ if __name__ == "__main__" :
     if args.wdn == 'anytown':   # Anytown is a very small network ...
         figsize     = (16,16)   # ... and thus requires a small frame
     else:                       # The rest however require a hi-res...
-       figsize     = (60,32)    # ... if they are to be readible
+        figsize     = (60,32)    # ... if they are to be readible
     
     #%% Convert EPANET hydraulic model to networkx graph
     
@@ -496,31 +496,45 @@ if __name__ == "__main__" :
     '''
     11.   P R E D I C T   &   P L O T   A   S I N G L E   U N S E E N   S I G N A L
     '''
+    if args.wdn == 'anytown':
     
-    rand_idx             = np.random.randint(0,200)                 # Pick a random signal
-    
-    n_nodes              = x_tst[rand_idx].shape[0]                 # Count number of nodes for later reshaping
-    partial_graph_signal = x_tst[rand_idx]                          # Define the partial graph signal as a random signal from an unseen test set
-    pred_graph_signal    = model.predict(G,partial_graph_signal)    # Predict a single partial signal given a graph G
-    real_graph_signal    = y_tst[rand_idx].reshape(n_nodes,)        # Define the real signal, as a signal from the label test set with matching idx
+        rand_idx             = np.random.randint(0,200)                 # Pick a random signal
         
+        n_nodes              = x_tst[rand_idx].shape[0]                 # Count number of nodes for later reshaping
+        partial_graph_signal = x_tst[rand_idx]                          # Define the partial graph signal as a random signal from an unseen test set
+        pred_graph_signal    = model.predict(G,partial_graph_signal)    # Predict a single partial signal given a graph G
+        real_graph_signal    = y_tst[rand_idx].reshape(n_nodes,)        # Define the real signal, as a signal from the label test set with matching idx
+    
+        fig, ax = plt.subplots(nrows=1, ncols=3, figsize=(30,8), dpi=200, sharex=True, sharey=True) 
+    
+    if args.wdn == 'l-town':
+            
+        rand_idx             = np.random.randint(0,10572)                 # Pick a random signal
+        
+        n_nodes              = pressure_2018[rand_idx].shape[0]                 # Count number of nodes for later reshaping
+        partial_graph_signal = pressure_2018[rand_idx]                          # Define the partial graph signal as a random signal from an unseen test set
+        pred_graph_signal    = model.predict(G,partial_graph_signal)    # Predict a single partial signal given a graph G
+        #real_graph_signal    = None        # Define the real signal, as a signal from the label test set with matching idx
+        
+        fig, ax = plt.subplots(nrows=1, ncols=2, figsize=(30,8), dpi=200, sharex=True, sharey=True) 
+    
     cmap      = plt.get_cmap('hot')             # Generate a colourmap
     part_cmap = cmap(partial_graph_signal[:,0]) # Fit the partial signal to the map...
     pred_cmap = cmap(pred_graph_signal)         # ... the predicted signal ...
-    real_cmap = cmap(real_graph_signal)         # ... and the real signal.
+    #real_cmap = cmap(real_graph_signal)         # ... and the real signal.
     
     # Initalise a canvas to plot on
     fig, ax = plt.subplots(nrows=1, ncols=3, figsize=(30,8), dpi=200, sharex=True, sharey=True) 
     
     # Visualise the the model using our visualisation utility
     ax[0] = visualise(G, pos=pos, color=part_cmap, figsize=figsize, edge_labels=True, axis=ax[0], cmap=part_cmap)
-    ax[1] = visualise(G, pos=pos, color=pred_cmap, figsize=figsize, edge_labels=True, axis=ax[1])
-    ax[2] = visualise(G, pos=pos, color=real_cmap, figsize=figsize, edge_labels=True, axis=ax[2])
+    ax[1] = visualise(G, pos=pos, color=pred_cmap, figsize=figsize, edge_labels=True, axis=ax[1], cmap=pred_cmap)
+    #ax[2] = visualise(G, pos=pos, color=real_cmap, figsize=figsize, edge_labels=True, axis=ax[2], cmap=real_cmap)
     
     # Set titles of the subplots
     ax[0].set_title('Input',        fontsize='xx-large')
     ax[1].set_title('Prediction',   fontsize='xx-large')
-    ax[2].set_title('True signal',  fontsize='xx-large')
+    #ax[2].set_title('True signal',  fontsize='xx-large')
     
     # Initialise a colorbar
     sm    = plt.cm.ScalarMappable(cmap=cmap)
