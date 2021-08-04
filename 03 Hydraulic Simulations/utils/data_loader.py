@@ -186,7 +186,29 @@ def dataCleaner(pressure_df, observed_nodes, rescale=None):
 
 # Function that embeds the x-y labels on the graph and returns a DataLoader obj.
 def dataGenerator(G, features, labels, batch_size, shuffle):
-    
+    '''
+    Function that embeds x and y labels on a graph and returns a torch
+    data loader object
+
+    Parameters
+    ----------
+    G : networkx graph
+        The graph.
+    features : numpy array
+        The x-features.
+    labels : numpy array
+        The y-labels.
+    batch_size : int
+        The batch size.
+    shuffle : bool
+        Random shuffle dataset?
+
+    Returns
+    -------
+    generator : TYPE
+        DataLoader object (generator for training).
+
+    '''
     # Initialise empty data list
     data    = []
     
@@ -203,3 +225,54 @@ def dataGenerator(G, features, labels, batch_size, shuffle):
                            shuffle    = shuffle)
     
     return generator
+
+def embedSignalOnGraph(G, signal):
+    '''
+    Function that embeds a signal, e.g. a partial one, on a given graph G
+
+    Parameters
+    ----------
+    G : networkx graph
+        The graph.
+    signal : numpy array
+        The x-features to embed on the graph.
+
+    Returns
+    -------
+    graph : TYPE
+        DESCRIPTION.
+
+    '''
+    # Generate a torch tensor object from the networkx graph
+    graph  = from_networkx(G)
+    # Embed the signal to the x-features of the tensor
+    graph.x= torch.Tensor(signal)
+    
+    # Return the graph tensor object
+    return graph
+
+def rescaleSignal(signal, scale, bias):
+    '''
+    Graph signals have often times been normalised or standardised
+    Given the scale and bias (e.g. mean and std in standard scaling, or min.
+    val and range during normalisation) the signal has been scaled as per:
+        (signal - bias) / scale
+    So, given a signal, bias and scale we may recalculate the initial signal 
+    as per:
+        (signal * scale) + scale
+
+    Parameters
+    ----------
+    signal : numpy array
+        The signal to rescale.
+    scale : scalar
+        The signal scale.
+    bias : scalar
+        The signal bias.
+
+    Returns
+    -------
+    (signal * scale) + bias.
+
+    '''    
+    return((np.dot(signal,scale))+bias)

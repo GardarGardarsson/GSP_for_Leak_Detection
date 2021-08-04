@@ -2,11 +2,11 @@
 # -*- coding: utf-8 -*-
 '''
 
-+-------------------------------+
-|                               |
-|    I M P O R T   M O D E L    | 
-|                               |
-+-------------------------------+
++-------------------------------------------------+
+|                                                 |
+|    S I G N A L   R E C O N S T R U C T I O N    | 
+|                                                 |
++-------------------------------------------------+
 
 Description
 
@@ -76,7 +76,7 @@ from utils.visualisation import visualise
 from utils.epanet_simulator import epanetSimulator
 
 # SCADA timeseries dataloader
-from utils.data_loader import battledimLoader, dataCleaner, dataGenerator
+from utils.data_loader import battledimLoader, dataCleaner, dataGenerator, embedSignalOnGraph, rescaleSignal
 
 # PyTorch early stopping callback
 from utils.early_stopping import EarlyStopping
@@ -84,6 +84,8 @@ from utils.early_stopping import EarlyStopping
 # GNN model library
 from modules.torch_gnn import ChebNet
 
+# Import user interface tools (menus etc.)
+import utils.user_interface as ui
 
 #%% Parse arguments
 
@@ -142,6 +144,12 @@ if __name__ == "__main__" :
                         type    = str,
                         help    = "Add a custom, descriptive tag")
     
+    # How many epochs to train the model
+    parser.add_argument('--epochs',
+                        default = 1, 
+                        type    = int,
+                        help    = "How many no. of epochs to train")
+    
     # Push the passed arguments to the 'args' variable
     args = parser.parse_args()
     
@@ -175,18 +183,25 @@ if __name__ == "__main__" :
         execution_no += 1                                       # Increment the execution id number
     
     execution_id   = execution_id + str(execution_no)           # Update the execution ID
+    model_path     = path_to_models + execution_id + '.pt'      # Generate complete model path w/ filename
+    log_path       = path_to_logs   + execution_id + '.csv'     # Generate complete log path w/ filename
     
-    model_path  = './studies/models/' + execution_id + '.pt'    # Generate complete model path w/ filename
-    log_path    = './studies/logs/'   + execution_id + '.csv'   # Generate complete log path w/ filename
-    
+    # If we have already trained a similar model we may wish to load its weights
+    # So, we must also generate a path to that model's state dictionary
+    if execution_no > 1:
+        last_id         = args.wdn + '-' + args.gnn + '-' + args.tag + '-' # Initialise previous version execution ID name
+        last_id         = last_id + str(execution_no - 1)                  # Execution ID number is the current number - 1  
+        last_model_path = path_to_models + last_id + '.pt'                 # Generate complete path to the previously trained model
+        last_log_path   = path_to_logs   + last_id + '.csv'                # Generate complete path to the previous 
+        
     # -------------------
     # Adjust figure sizes
     # -------------------
     
     if args.wdn == 'anytown':   # Anytown is a very small network ...
-        figsize     = (30,16)   # ... and thus requires a small frame
-    else:                        # The rest however require a hi-res...
-       figsize     = (60,32)   # ... if they are to be readible
+        figsize     = (16,16)   # ... and thus requires a small frame
+    else:                       # The rest however require a hi-res...
+       figsize     = (60,32)    # ... if they are to be readible
     
     #%% Convert EPANET hydraulic model to networkx graph
     
@@ -283,7 +298,7 @@ if __name__ == "__main__" :
             colormap = pd.Series([1.0 if i in sensors else 0.0 for i in range(1,G.number_of_nodes()+1)])
         
         # Generate a colormap
-        cmap  = plt.get_cmap('coolwarm')
+        cmap  = plt.get_cmap('hot')
         
         # Fit the datapoints to the colormap
         color = cmap(colormap)
@@ -397,7 +412,7 @@ if __name__ == "__main__" :
     learning_rate = 3e-4
     decay         = 6e-6
     shuffle       = False
-    epochs        = 100
+    epochs        = args.epochs
     
     # --------------
     # Training setup
@@ -417,6 +432,13 @@ if __name__ == "__main__" :
                         data_scale     = scale, 
                         data_bias      = bias).to(device)
     
+    # If we've already train a model with the same setup
+    if execution_no > 1:
+        # We offer the user the option to load the previously trained weights
+        if ui.yes_no_menu("A previous version of this model was found, do you want to load it ( 'yes' / 'no' ) ?\t"):
+           model.load_model(last_model_path, last_log_path)
+            # model.load_state_dict(torch.load(last_model_path))
+    
     # Instantiate an optimizer
     optimizer = torch.optim.Adam([dict(params=model.conv1.parameters(), weight_decay=decay),
                                   dict(params=model.conv2.parameters(), weight_decay=decay),
@@ -428,94 +450,87 @@ if __name__ == "__main__" :
     # Configure an early stopping callback
     estop    = EarlyStopping(min_delta=.00001, patience=30)
     
-    # Initialise the best validation loss for saving the best model
-    best_val_loss = np.inf
-    
     #%% Train the model
     
     '''
     10.   T R A I N 
     '''
+        
+    if ui.yes_no_menu("Do you want to train the model ( 'yes' / 'no' ) ?\t"):
+        
+        print("Training starting...\n")
+
+        # Train for the predefined number of epochs
+        for epoch in range(1, epochs+1):
+            
+            # Start a stopwatch timer
+            start_time = time.time()
+            
+            # Train a single epoch, passing the optimizer and current epoch number
+            model.train_one_epoch(optimizer = optimizer)
+            
+            # Validate the model after the gradient update
+            model.validate()
+            
+            # Update the model results for the current epoch
+            model.update_results()
+            
+            # Print stats for the epoch and the execution time
+            model.print_stats(time.time() - start_time)
+            
+            # If this is the best model
+            if model.val_loss < model.best_val_loss:
+                # We save it
+                torch.save(model.state_dict(), model_path)
+            
+            # If model is not improving
+            if estop.step(torch.tensor(model.val_loss)):
+                print('Early stopping activated...')
+                break
+        
+        print("\nSaving training results to '{}'...\n".format(log_path))
+        model.results.to_csv(log_path)
+
     
-    print("Training starting...\n")
-    
-    # Train for the predefined number of epochs
-    for epoch in range(1, epochs+1):
-        
-        # Start a stopwatch timer
-        start_time = time.time()
-        
-        # Train a single epoch, passing the optimizer and current epoch number
-        model.train_one_epoch(optimizer     = optimizer,
-                              current_epoch = epoch)
-        
-        # Validate the model after the gradient update
-        model.validate()
-        
-        # Update the model results for the current epoch
-        model.update_results()
-        
-        # Print stats for the epoch and the execution time
-        model.print_stats(time.time() - start_time)
-        
-        # If this is the best model
-        if model.val_loss < best_val_loss:
-            # We save it
-            torch.save(model.state_dict(), model_path)
-        
-        # If model is not improving
-        if estop.step(torch.tensor(model.val_loss)):
-            print('Early stopping activated...')
-            break
-    
-    #%% Save training results
-    
+    # %% Predict a single unseen value
     '''
-    11.   S A V E   R E S U L T S
+    11.   P R E D I C T   &   P L O T   A   S I N G L E   U N S E E N   S I G N A L
     '''
     
-    print("Saving training results to '{}'...\n".format(log_path))
+    rand_idx             = np.random.randint(0,200)                 # Pick a random signal
     
-    model.results.to_csv(log_path)
+    n_nodes              = x_tst[rand_idx].shape[0]                 # Count number of nodes for later reshaping
+    partial_graph_signal = x_tst[rand_idx]                          # Define the partial graph signal as a random signal from an unseen test set
+    pred_graph_signal    = model.predict(G,partial_graph_signal)    # Predict a single partial signal given a graph G
+    real_graph_signal    = y_tst[rand_idx].reshape(n_nodes,)        # Define the real signal, as a signal from the label test set with matching idx
+        
+    cmap      = plt.get_cmap('hot')             # Generate a colourmap
+    part_cmap = cmap(partial_graph_signal[:,0]) # Fit the partial signal to the map...
+    pred_cmap = cmap(pred_graph_signal)         # ... the predicted signal ...
+    real_cmap = cmap(real_graph_signal)         # ... and the real signal.
     
-    # %%
-    
-    
-    def dataProcessor(G, features):
-        graph  = from_networkx(G)
-        graph.x= torch.Tensor(features)
-        return graph
-    
-    def rescaleSignal(signal, scale, bias):
-        return((np.dot(signal,scale))+bias)
-    
-    n_nodes              = x_tst[5].shape[0]
-    partial_graph_signal = x_tst[5] 
-    gnn_input            = dataProcessor(G, partial_graph_signal)
-    pred_graph_signal    = model(gnn_input).detach().numpy().reshape(n_nodes,)
-    real_graph_signal    = y_tst[5].reshape(n_nodes,)
-    
-    cmap      = plt.get_cmap('hot')
-    part_cmap = cmap(partial_graph_signal[:,0])
-    real_cmap = cmap(real_graph_signal)
-    pred_cmap = cmap(pred_graph_signal)
-    
-    # %%
-    
-    fig, ax = plt.subplots(nrows=1, ncols=3, figsize=(30,8), dpi=200, sharex=True, sharey=True)
+    # Initalise a canvas to plot on
+    fig, ax = plt.subplots(nrows=1, ncols=3, figsize=(30,8), dpi=200, sharex=True, sharey=True) 
     
     # Visualise the the model using our visualisation utility
     ax[0] = visualise(G, pos=pos, color=part_cmap, figsize=figsize, edge_labels=True, axis=ax[0], cmap=part_cmap)
     ax[1] = visualise(G, pos=pos, color=pred_cmap, figsize=figsize, edge_labels=True, axis=ax[1])
     ax[2] = visualise(G, pos=pos, color=real_cmap, figsize=figsize, edge_labels=True, axis=ax[2])
     
+    # Set titles of the subplots
     ax[0].set_title('Input',        fontsize='xx-large')
     ax[1].set_title('Prediction',   fontsize='xx-large')
     ax[2].set_title('True signal',  fontsize='xx-large')
     
-    plt.suptitle("{} after {} epochs\n Sensors at nodes: {}".format(model.name, model.epoch,sensors), fontsize='xx-large')
-    cmap=plt.get_cmap('hot')
-    sm = plt.cm.ScalarMappable(cmap=cmap)
+    # Initialise a colorbar
+    sm    = plt.cm.ScalarMappable(cmap=cmap)
     sm._A = []
+    
+    # Print a heading
+    plt.suptitle("{} after {} epochs\n Sensors at nodes: {}, test signal number: {}".format(model.name, model.epoch,sensors,rand_idx), fontsize='xx-large')
+    
+    # Plot colorbar
     plt.colorbar(sm, ax=ax.ravel().tolist())
+    
+    # Display
     plt.show()

@@ -47,6 +47,9 @@ from utils.early_stopping import EarlyStopping
 # Metrics
 from utils.metrics import Metrics
 
+# Import datahandler for predictions
+from utils.data_loader import embedSignalOnGraph
+
 
 class _GNNbase(torch.nn.Module):
     
@@ -72,13 +75,22 @@ class _GNNbase(torch.nn.Module):
         self.val_rel_err     = 0
         self.val_rel_err_obs = 0
         self.val_rel_err_hid = 0
-        
+                
         # A Pandas DataFrame containing the per-epoch results of the model
         self.results = pd.DataFrame(columns=['trn_loss', 
                                              'val_loss', 
                                              'val_rel_err', 
                                              'val_rel_err_o', 
                                              'val_rel_err_h'])
+        
+        # The number of epochs the model has trained is always the same as the lenght of the results dataframe
+        self.epoch   = len(self.results)
+        
+        # Initialise the best validation loss
+        self.best_val_loss = np.inf
+        
+        # Initialise a first run flag for the training
+        self.first_training_run = True
         
         # A header for printing per-epoch statistics during training
         self.header1  = '{:^5}'.format('epoch')
@@ -87,7 +99,30 @@ class _GNNbase(torch.nn.Module):
         
         self.header   = self.header1 + self.header2 + self.header3
         
-    def train_one_epoch(self, optimizer, current_epoch):
+        
+    def train_one_epoch(self, optimizer):
+        '''
+        Train the GNN model for a single epoch
+
+        Parameters
+        ----------
+        optimizer : torch.optimizer
+            Pass the trainer an optimizer object, e.g. ADAM.
+        current_epoch : TYPE
+            Pass the trainer the current epoch for printing 
+            training status purposes.
+
+        Returns
+        -------
+        None. 
+        Training losses and model weights are updated in the object.
+
+        '''
+        
+        # Every time we start a new training run
+        if self.first_training_run:
+            print(self.header)              # We print out a header for the session statistics
+            self.first_training_run = False # And reset the first run flag
         
         # Set the model to train mode
         self.train()
@@ -99,7 +134,7 @@ class _GNNbase(torch.nn.Module):
         n = len(self.data_generator.dataset)
         
         # Let the model class know the current epoch to update stats
-        self.epoch = current_epoch
+        self.epoch += 1
         
         # Iterate over batches
         for batch in self.data_generator:
@@ -117,8 +152,19 @@ class _GNNbase(torch.nn.Module):
             
             # Avg. the loss over the dataset size and update the training loss member
             self.trn_loss = tot_loss / n
+        
+    
     
     def validate(self):
+        '''
+        Validate the model on the validation batch
+
+        Returns
+        -------
+        None. 
+        Validation losses and errors are updated in the model object.
+
+        '''
         
         # Set the model to evaluation mode
         self.eval()
@@ -155,8 +201,41 @@ class _GNNbase(torch.nn.Module):
         self.val_rel_err     = tot_rel_err / n      # Update relative error member
         self.val_rel_err_obs = tot_rel_err_obs / n  # Update observed rel. err. member
         self.val_rel_err_hid = tot_rel_err_hid / n  # Update hidden rel. err. member
+        
+        
+    def predict(self, G, partial_graph_signal):
+        '''
+        Predict a single passed partially observed graph signal
+
+        Parameters
+        ----------
+        G : networkx graph
+            The graph.
+        partial_graph_signal : TYPE
+            The partially observed signal.
+
+        Returns
+        -------
+        pred_graph_signal : TYPE
+            A predicted, complete graph signal.
+
+        '''
+        n_nodes           = partial_graph_signal.shape[0]                       # Count the number of nodes in the graph for reshaping later
+        gnn_input         = embedSignalOnGraph(G, partial_graph_signal)         # Generate a GNN input by embedding timeseries on graph
+        pred_graph_signal = self(gnn_input).detach().numpy().reshape(n_nodes,)  # Make a prediction and return a numpy array of same shape as the one passed
+        
+        return pred_graph_signal
+    
     
     def update_results(self):
+        '''
+        Update the self-contained training and validation results
+
+        Returns
+        -------
+        None.
+
+        '''
         # A method for updating the Pandas DataFrame containing training and validation results   
         self.latest_results = pd.Series({'trn_loss'      : self.trn_loss,
                                          'val_loss'      : self.val_loss,
@@ -166,10 +245,71 @@ class _GNNbase(torch.nn.Module):
         
         self.results = self.results.append(self.latest_results, ignore_index=True)
         
-    def print_stats(self, epoch_time):
         
-        # During the first and every 20th epoch, we print a header for the stats
-        if self.epoch == 1 or not self.epoch % 20:
+    def load_results(self, path_to_logs):
+        '''
+        Load previous training results
+
+        Parameters
+        ----------
+        path_to_logs : str
+            Path to the last version of the model.
+
+        Returns
+        -------
+        None.
+        Updates self 
+
+        '''
+        self.results       = pd.read_csv(path_to_logs)        # Load the results to the self-contained Pandas DataFrame
+        self.epoch         = len(self.results)                # Update the number of epochs the model has trained
+        self.best_val_loss = self.results['val_loss'].min()   # Loading best validation loss
+        
+        # Print some info about the results loaded
+        print('\n \
+               Loaded previous model results...\n \
+               --------------------------------------------------\n \
+               Model has been trained for:\t{} epochs\n \
+               Best validation loss:      \t{} \n \
+               Occurred in training round:\t{} '.format(self.epoch, self.best_val_loss, self.results['val_loss'].idxmin()))
+        
+    def load_model(self, path_to_model, path_to_logs):
+        '''
+        Load a saved state dictionary of the model
+
+        Parameters
+        ----------
+        path_to_model : str
+            Path to a previous model.
+        path_to_logs : str
+            Path to previous results.
+
+        Returns
+        -------
+        None.
+        Updates the model weights and self-contained stats
+
+        '''
+        self.load_state_dict(torch.load(path_to_model)) # Load state dict
+        self.load_results(path_to_logs)                 # Load the results from previous training and update self stats
+        
+    def print_stats(self, epoch_time):
+        '''
+        Print out the training run statistics
+
+        Parameters
+        ----------
+        epoch_time : float
+            The current execution time for the training run.
+
+        Returns
+        -------
+        None.
+        Prints a message.
+
+        '''
+        # Every 20th epoch, we print a header for the stats
+        if not self.epoch % 20:
             print(self.header)
         
         # Format the print message field
@@ -179,6 +319,8 @@ class _GNNbase(torch.nn.Module):
     
         # Print the statistics
         print(epoch + results + run_time)
+
+
 
 
 class ChebNet(_GNNbase):
@@ -230,7 +372,7 @@ if __name__ == '__main__':
     from utils.data_loader import dataGenerator
     
     # Set the path to the EPANET input file
-    path_to_wdn = './water_networks/anytown.inp'
+    path_to_wdn = './data/ANYTOWN.inp'
     
     # Import the .inp file using the EPYNET library
     wdn = epynet.Network(path_to_wdn)
@@ -245,10 +387,10 @@ if __name__ == '__main__':
     # Load the training timeseries data 
     # This was generated by running the 'generate_dta.py' script for
     # the 'anytown.inp' of the GraphConvWat project of G. Hajgató et al.
-    x_trn = np.load('./water_networks/anytown_data/trn_x.npy')
-    y_trn = np.load('./water_networks/anytown_data/trn_y.npy')
-    x_val = np.load('./water_networks/anytown_data/vld_x.npy')
-    y_val = np.load('./water_networks/anytown_data/vld_y.npy')
+    x_trn = np.load('./data/anytown-data/trn_x.npy')
+    y_trn = np.load('./data/anytown-data/trn_y.npy')
+    x_val = np.load('./data/anytown-data/vld_x.npy')
+    y_val = np.load('./data/anytown-data/vld_y.npy')
     
     scale_y = np.std(y_trn)
     bias_y  = np.mean(y_trn)
