@@ -116,6 +116,14 @@ if __name__ == "__main__" :
                         choices = ['chebnet','dcrnn','gcn'],
                         type    = str,
                         help    = "Choose GNN: ['chebnet','dcrnn','gcn']")
+     
+    # Choice of GNN model
+    parser.add_argument('--weights',
+                        default = 'inv_pipe_length',
+                        choices = ['unweighted' , 'hydraulic_loss' , 'log_hydraulic_loss',
+                                   'pruned'     , 'pipe_length'    , 'inv_pipe_lengt'],
+                        type    = str,
+                        help    = "Choose weights assignment!") 
     
     # Choice of visualising the created graph
     parser.add_argument('--visualise',
@@ -219,7 +227,7 @@ if __name__ == "__main__" :
     
     # Convert the file using a custom function, based on:
     # https://github.com/BME-SmartLab/GraphConvWat 
-    G , pos , head = get_nx_graph(wdn, weight_mode='inv_pipe_length', get_head=True)
+    G , pos , head = get_nx_graph(wdn, weight_mode=args.weights, get_head=True)
     
     
     #%% Read in dataset configuration (.yml)
@@ -295,7 +303,7 @@ if __name__ == "__main__" :
         elif args.visualiseWhat == 'sensor_location':
             
             # Set pressure sensors as 1 and unobserved nodes as 0
-            colormap = pd.Series([1.0 if i in sensors else 0.0 for i in range(1,G.number_of_nodes()+1)])
+            colormap = pd.Series([0.4 if i in sensors else 0.0 for i in range(1,G.number_of_nodes()+1)])
         
         # Generate a colormap
         cmap  = plt.get_cmap('hot')
@@ -309,49 +317,22 @@ if __name__ == "__main__" :
         plt.show()
         plt.savefig(path_to_figs + execution_id + '.png')
     
-    print('Calculating graph diameter...\n')
+    #print('Calculating graph diameter...\n')
     # We may want to find the largest subgraph diameter
-    largest_subgraph_diameter = 0
-    
+    # largest_subgraph_diameter = 0
+    #
     # For each component of the imported network
-    for c in nx.connected_components(G):
-        graph = G.subgraph(c)                       # Generate a subgraph
-        diameter = nx.diameter(graph)               # Measure its diameter
-        if diameter > largest_subgraph_diameter:    # If it's the longest encountered
-            diameter = largest_subgraph_diameter    # Store it  
-        
-    #%% Import timeseries data
-    
-    '''
-    6.   I M P O R T   S C A D A   D A T A 
-    '''
-    
-    if args.wdn == 'l-town':
-        
-        print('Importing SCADA dataset...\n') 
-        
-        # Load the data into a numpy array with format matching the GraphConvWat problem
-        pressure_2018 = battledimLoader(observed_nodes = sensors,
-                                        n_nodes        = 782,
-                                        path           = path_to_data,
-                                        file           = '2018_SCADA_Pressures.csv')
-        
-        # Print information and instructions about the imported data
-        msg = "The imported sensor data has shape (i,n,d): {}".format(pressure_2018.shape)
-        
-        print(msg + "\n" + len(msg)*"-" + "\n")
-        print("Where: ")
-        print("'i' is the number of observations: {}".format(pressure_2018.shape[0]))
-        print("'n' is the number of nodes: {}".format(pressure_2018.shape[1]))
-        print("'d' is a {}-dimensional vector consisting of the pressure value and a mask ".format(pressure_2018.shape[2]))
-        print("The mask is set to '1' on observed nodes and '0' otherwise")
-        
-        print("\n" + len(msg)*"-" + "\n")
+    #for c in nx.connected_components(G):
+    #    graph = G.subgraph(c)                       # Generate a subgraph
+    #    diameter = nx.diameter(graph)               # Measure its diameter
+    #    if diameter > largest_subgraph_diameter:    # If it's the longest encountered
+    #        diameter = largest_subgraph_diameter    # Store it  
+
     
     #%% Generate the nominal pressure data from an EPANET simulation
     
     '''
-    7.   G E N E R A T E   N O M I N A L   D A T A
+    6.   G E N E R A T E   N O M I N A L   D A T A   F O R   T R A I N I N G
     '''
     
     if args.wdn =='l-town':
@@ -375,7 +356,7 @@ if __name__ == "__main__" :
     #%% Load the nominal pressure data and prepare for training
     
     '''
-    8.   P R E P A R E   T R A I N I N G   D A T A    
+    7.   P R E P A R E   T R A I N I N G   D A T A    
     '''
     
     if args.wdn == 'l-town':    
@@ -400,7 +381,7 @@ if __name__ == "__main__" :
     #%% Load the nominal pressure data and prepare for training
     
     '''
-    9.   S E T U P   F O R   T R A I N I N G 
+    8.   S E T U P   F O R   T R A I N I N G 
     '''
     
     print('Setting up training session and creating model...\n')
@@ -453,7 +434,7 @@ if __name__ == "__main__" :
     #%% Train the model
     
     '''
-    10.   T R A I N 
+    9.   T R A I N 
     '''
         
     if ui.yes_no_menu("Do you want to train the model ( 'yes' / 'no' ) ?\t"):
@@ -491,7 +472,39 @@ if __name__ == "__main__" :
         print("\nSaving training results to '{}'...\n".format(log_path))
         model.results.to_csv(log_path)
 
+            
+    #%% Import timeseries data
     
+    '''
+    10.   I M P O R T   S C A D A   D A T A 
+    '''
+    
+    if args.wdn == 'l-town':
+        
+        print('Importing SCADA dataset...\n') 
+        
+        # Load the data into a numpy array with format matching the GraphConvWat problem
+        pressure_2018 = battledimLoader(observed_nodes = sensors,
+                                        n_nodes        = 782,
+                                        path           = path_to_data,
+                                        file           = '2018_SCADA_Pressures.csv',
+                                        rescale        = True, 
+                                        scale          = scale,
+                                        bias           = bias)
+        
+        # Print information and instructions about the imported data
+        msg = "The imported sensor data has shape (i,n,d): {}".format(pressure_2018.shape)
+        
+        print(msg + "\n" + len(msg)*"-" + "\n")
+        print("Where: ")
+        print("'i' is the number of observations: {}".format(pressure_2018.shape[0]))
+        print("'n' is the number of nodes: {}".format(pressure_2018.shape[1]))
+        print("'d' is a {}-dimensional vector consisting of the pressure value and a mask ".format(pressure_2018.shape[2]))
+        print("The mask is set to '1' on observed nodes and '0' otherwise")
+        
+        print("\n" + len(msg)*"-" + "\n")
+        
+        
     # %% Predict a single unseen value
     '''
     11.   P R E D I C T   &   P L O T   A   S I N G L E   U N S E E N   S I G N A L
@@ -509,22 +522,19 @@ if __name__ == "__main__" :
     
     if args.wdn == 'l-town':
             
-        rand_idx             = np.random.randint(0,10572)                 # Pick a random signal
+        rand_idx             = np.random.randint(0,105120)                 # Pick a random signal
         
         n_nodes              = pressure_2018[rand_idx].shape[0]                 # Count number of nodes for later reshaping
         partial_graph_signal = pressure_2018[rand_idx]                          # Define the partial graph signal as a random signal from an unseen test set
         pred_graph_signal    = model.predict(G,partial_graph_signal)    # Predict a single partial signal given a graph G
         #real_graph_signal    = None        # Define the real signal, as a signal from the label test set with matching idx
         
-        fig, ax = plt.subplots(nrows=1, ncols=2, figsize=(30,8), dpi=200, sharex=True, sharey=True) 
+        fig, ax = plt.subplots(nrows=1, ncols=2, figsize=(50,16), dpi=200, sharex=True, sharey=True) 
     
     cmap      = plt.get_cmap('hot')             # Generate a colourmap
     part_cmap = cmap(partial_graph_signal[:,0]) # Fit the partial signal to the map...
     pred_cmap = cmap(pred_graph_signal)         # ... the predicted signal ...
     #real_cmap = cmap(real_graph_signal)         # ... and the real signal.
-    
-    # Initalise a canvas to plot on
-    fig, ax = plt.subplots(nrows=1, ncols=3, figsize=(30,8), dpi=200, sharex=True, sharey=True) 
     
     # Visualise the the model using our visualisation utility
     ax[0] = visualise(G, pos=pos, color=part_cmap, figsize=figsize, edge_labels=True, axis=ax[0], cmap=part_cmap)
@@ -548,3 +558,4 @@ if __name__ == "__main__" :
     
     # Display
     plt.show()
+    
