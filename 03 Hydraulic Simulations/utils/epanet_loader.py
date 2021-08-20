@@ -158,17 +158,17 @@ def get_nx_graph(wds, weight_mode='unweighted', get_head=False):
         for pipe in wds.pipes:
             if (pipe.from_node.index in junc_dict) and (pipe.to_node.index in junc_dict):
                 weight  = 1/(pipe.length)
-                G.add_edge(pipe.from_node.index, pipe.to_node.index, weight=float(weight))
+                G.add_edge(pipe.from_node.index, pipe.to_node.index, weight=float(weight), name=str(pipe).replace("<epynet.Pipe with id '","").replace("'>", ""))
                 if weight > max_weight:
                     max_weight = weight
         for (_,_,d) in G.edges(data=True):
             d['weight'] /= max_weight
         for pump in wds.pumps:
             if (pump.from_node.index in junc_dict) and (pump.to_node.index in junc_dict):
-                G.add_edge(pump.from_node.index, pump.to_node.index, weight=1.)
+                G.add_edge(pump.from_node.index, pump.to_node.index, weight=1., name=str(valve).replace("<epynet.Valve with id '","").replace("'>", ""))
         for valve in wds.valves:
             if (valve.from_node.index in junc_dict) and (valve.to_node.index in junc_dict):
-                G.add_edge(valve.from_node.index, valve.to_node.index, weight=1.)
+                G.add_edge(valve.from_node.index, valve.to_node.index, weight=1., name=str(pump).replace("<epynet.Pump with id '","").replace("'>", ""))
                    
     # So I have an issue with the sorting of the nodes of the imported graph
     H = nx.Graph()

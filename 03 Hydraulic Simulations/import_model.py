@@ -105,7 +105,7 @@ if __name__ == "__main__" :
     # Configure the argparser:
     # Choice of water-distribution network to work with
     parser.add_argument('--wdn',
-                        default = 'anytown',
+                        default = 'l-town',
                         choices = ['l-town','anytown','ctown','richmond'],
                         type    = str,
                         help    = "Choose WDN: ['l-town', 'anytown', 'ctown', 'richmond']")
@@ -279,7 +279,14 @@ if __name__ == "__main__" :
         # First node is enumerated 1 not 0 so:
         sensors += np.ones(shape=sensors.shape, dtype=int).tolist()
         
-        
+    
+    # %%
+    
+    for sensor_node in sensors:
+        G.add_edge(u_of_edge=sensor_node,
+                   v_of_edge=sensor_node,
+                   weight=1.,name='SELF')
+    
     #%% Visualise the created graph
     
     '''
@@ -418,7 +425,6 @@ if __name__ == "__main__" :
         # We offer the user the option to load the previously trained weights
         if ui.yes_no_menu("A previous version of this model was found, do you want to load it ( 'yes' / 'no' ) ?\t"):
            model.load_model(last_model_path, last_log_path)
-            # model.load_state_dict(torch.load(last_model_path))
     
     # Instantiate an optimizer
     optimizer = torch.optim.Adam([dict(params=model.conv1.parameters(), weight_decay=decay),

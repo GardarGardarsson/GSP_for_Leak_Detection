@@ -46,7 +46,9 @@ def visualise(G, pos=None, color='blue', epoch=None, loss=None, axis=None,figsiz
                          font_size = 7,font_color = 'w',
                          node_color=color, ax=axis)
         #labels = nx.get_edge_attributes(G,'weight')
-        labels = dict([((u,v,), f"{d['weight']:.2f}") for u,v,d in G.edges(data=True)])
+        
+        labels = dict([((u,v,), d['name']) for u,v,d in G.edges(data=True)])
+        #labels = dict([((u,v,), f"{d['weight']:.2f}") for u,v,d in G.edges(data=True)])
 
         nx.draw_networkx_edge_labels(G,pos,edge_labels=labels, ax=axis)
         
