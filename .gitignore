@@ -11,7 +11,10 @@
 03 Hydraulic Simulations/studies/figs
 03 Hydraulic Simulations/studies/models
 04 Leakage Detection/data
+04 Leakage Detection/2018_predictions.csv
+04 Leakage Detection/2019_predictions.csv
 sshfs
+test
 
 # F R O M   S A M P L E   G I T I G N O R E  F I L E:
 # Source: https://gist.github.com/octocat/9257657
@@ -28,6 +31,7 @@ sshfs
 *.rar
 *.tar
 *.zip
+*.mp4
 
 # Compiled source #
 ###################

@@ -48,8 +48,14 @@ def predict_pressure(graph, pressure_series, print_out_rate=100, save=True, file
 if __name__ == '__main__':
     
     '''
-     1. Make Graph
+     0. Configure Runtime
     '''
+    print('+' + '-'*63 + '+')
+    print('|' + ' '*63 + '|')
+    print('|' + '{:^63s}'.format("P R E D I C T . P Y") + '|')
+    print('|' + ' '*63 + '|')
+    print('+' + '-'*63 + '+')
+    print('\n')
     
     # Runtime configuration
     path_to_wdn     = './data/L-TOWN.inp'
@@ -62,6 +68,11 @@ if __name__ == '__main__':
     model_name      = 'l-town-chebnet-' + weight_mode +'-' + scaling + '{}'.format('-self_loop' if self_loops else '')
     last_model_path = './studies/models/' + model_name + '-1.pt'
     last_log_path   = './studies/logs/'   + model_name + '-1.csv' 
+        
+    '''
+     1. Make Graph
+    '''
+    print('1. Making graph from EPANET input file \n')
     
     # Import the .inp file using the EPYNET library
     wdn = epynet.Network(path_to_wdn)
@@ -92,6 +103,7 @@ if __name__ == '__main__':
     '''
      2. Get Simulation Data
     '''
+    print('2. Retrieving simulation data \n')
     
     # Instantiate the nominal WDN model
     nominal_wdn_model = epanetSimulator(path_to_wdn, path_to_data)
@@ -115,6 +127,7 @@ if __name__ == '__main__':
     '''
      3. Get Historical Data
     '''
+    print('3. Retrieving historical data \n')
     
     # Load the data into a numpy array with format matching the GraphConvWat problem
     pressure_2018 = battledimLoader(observed_nodes = sensors,
@@ -136,6 +149,7 @@ if __name__ == '__main__':
     '''
      4. Load a Trained GNN Model
     '''
+    print('4. Loading trained GNN model \n')
     
     # Set the computation device as NVIDIA GPU if available else CPU
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -155,16 +169,25 @@ if __name__ == '__main__':
     '''
      5. Predict a Year's worth of Data
     '''
+    print('\n')
+    print('5.1 Predicting 2018 pressure\n')
     
     prediction_2018 = predict_pressure(G, 
-                                       pressure_2018[:11], 
+                                       pressure_2018,
                                        print_out_rate = print_out_rate, 
                                        save           = True, 
                                        filename       = '2018_predictions.csv')
     
+    print('5.2 Predicting 2019 pressure\n')
+    
     prediction_2019 = predict_pressure(G, 
-                                       pressure_2019[:11], 
+                                       pressure_2019,
                                        print_out_rate = print_out_rate, 
                                        save           = True, 
                                        filename       = '2019_predictions.csv')
     
+    print('+' + '-'*63 + '+')
+    print('|' + ' '*63 + '|')
+    print('|' + '{:^63s}'.format("E X E C U T I O N   C O M P L E T E D") + '|')
+    print('|' + ' '*63 + '|')
+    print('+' + '-'*63 + '+')

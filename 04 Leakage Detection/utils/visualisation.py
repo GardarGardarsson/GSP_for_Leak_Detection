@@ -42,7 +42,7 @@ def visualise(G, pos=None, color='blue', epoch=None, loss=None, axis=None,figsiz
     # If this is a networkx graph
     else:
         nx.draw_networkx(G, pos=pos, arrows = G.is_directed(),
-                         with_labels=True, node_size = 175, 
+                         with_labels=True, node_size = 175,
                          font_size = 7,font_color = 'w',
                          node_color=color, ax=axis)
         #labels = nx.get_edge_attributes(G,'weight')
@@ -53,4 +53,3 @@ def visualise(G, pos=None, color='blue', epoch=None, loss=None, axis=None,figsiz
         nx.draw_networkx_edge_labels(G,pos,edge_labels=labels, ax=axis)
         
     return axis
-

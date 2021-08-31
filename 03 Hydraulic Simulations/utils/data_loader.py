@@ -12,15 +12,30 @@ Created on Fri Jul 23 15:24:59 2021
 
 @author: gardar
 """
+import os 
 
 import torch
 import numpy as np
 import pandas as pd
-import networkx as nx
 from torch_geometric.data import DataLoader
 from torch_geometric.utils import from_networkx
 
-from sklearn.preprocessing import MinMaxScaler
+# --------------------------
+# Importing custom libraries
+# --------------------------
+
+# To make sure we don't raise an error on importing project specific 
+# libraries, we retrieve the path of the program file ...
+filepath = os.path.dirname(os.path.realpath(__file__))
+
+# ... set that as our working directory ...
+os.chdir(filepath)
+
+# ... and hop back one level!
+os.chdir('..')
+
+# Random batch sampler that maintains sequential ordering for temporal learning tasks
+from modules.torch_samplers import RandomBatchSampler
 
 # Function to load the timeseries datasets of the BattLeDIM challenge
 def battledimLoader(observed_nodes, n_nodes=782, path='./BattLeDIM/', file='2018_SCADA_Pressures.csv', rescale=False, scale=None, bias=None):
@@ -189,7 +204,7 @@ def dataCleaner(pressure_df, observed_nodes, rescale=None):
     return x,y,scale,bias
 
 # Function that embeds the x-y labels on the graph and returns a DataLoader obj.
-def dataGenerator(G, features, labels, batch_size, shuffle):
+def dataGenerator(G, features, labels, batch_size, drop_last):
     '''
     Function that embeds x and y labels on a graph and returns a torch
     data loader object
@@ -204,8 +219,8 @@ def dataGenerator(G, features, labels, batch_size, shuffle):
         The y-labels.
     batch_size : int
         The batch size.
-    shuffle : bool
-        Random shuffle dataset?
+    drop_last : bool
+        Leave out the last fold if inconsistent with batch_size?
 
     Returns
     -------
@@ -223,10 +238,14 @@ def dataGenerator(G, features, labels, batch_size, shuffle):
         graph.y = torch.Tensor(y)   # Embed labels to the graph
         data.append(graph)          # Append the tensorised graph reps to the data list
     
+    # Generate a sampler for picking sequential mini-batches at random from dataset
+    sampler   = RandomBatchSampler(data, batch_size, drop_last=False)
+    
     # Construct a generator (data loader) from the list of graphs
     generator = DataLoader(data, 
-                           batch_size = batch_size, 
-                           shuffle    = shuffle)
+                           batch_sampler = sampler)
+                           #batch_size = batch_size, 
+                           #shuffle    = shuffle)
     
     return generator
 
@@ -280,3 +299,37 @@ def rescaleSignal(signal, scale, bias):
 
     '''    
     return((np.dot(signal,scale))+bias)
+
+def predictionTaskDataSplitter(x, y, n_timesteps):
+    '''
+    Splitting a given dataset (x,y) where 'x' are features at n-number of timesteps and 'y' label or target state for the given 'x'
+    The parameter n_timesteps decides how many 'x' are behind a given 'y'
+    For prediction, if we are to predict y_hat( t+1 ), with n=3, then the splitter returns x( t, t-1, t-2 ), y(t+1)
+
+    Parameters
+    ----------
+    x : numpy array
+        The timeseries signal array
+    y : numpy array
+        The target timeseries signal array
+    n_timesteps : int
+        Number of timesteps in x that correspont to target state in y
+
+    Returns
+    -------
+    x, y where x(t, t-1, ... t-n) for each y(t+1)
+
+    '''
+    window_start = 0
+    window_end = n_timesteps
+    n_samples = len(y)
+    x_new = []
+    y_new = []
+    
+    for i in range(n_timesteps, n_samples):
+        x_new.append( np.array( x[window_start:window_end] ) )
+        y_new.append( y[i] )
+        window_start += 1
+        window_end   += 1
+        
+    return np.array(x_new) , np.array(y_new)

@@ -222,7 +222,9 @@ class _GNNbase(torch.nn.Module):
         '''
         n_nodes           = partial_graph_signal.shape[0]                       # Count the number of nodes in the graph for reshaping later
         gnn_input         = embedSignalOnGraph(G, partial_graph_signal)         # Generate a GNN input by embedding timeseries on graph
-        pred_graph_signal = self(gnn_input).detach().numpy().reshape(n_nodes,)  # Make a prediction and return a numpy array of same shape as the one passed
+        gnn_input         = gnn_input.to(self.device)
+        pred_graph_signal = self(gnn_input).to('cpu')                           # Make a prediction and return a numpy array of same shape as the one passed
+        pred_graph_signal = pred_graph_signal.detach().numpy().reshape(n_nodes,)
         
         return pred_graph_signal
     
