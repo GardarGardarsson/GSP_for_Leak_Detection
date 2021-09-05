@@ -63,11 +63,14 @@ if __name__ == '__main__':
     weight_mode     = 'pipe_length'
     self_loops      = True
     scaling         = 'minmax'
+    task            = 'prediction'
+    mode            = 'n_timesteps'
+    n_timesteps     = 3
     figsize         = (50,16)
     print_out_rate  = 100               
-    model_name      = 'l-town-chebnet-' + weight_mode +'-' + scaling + '{}'.format('-self_loop' if self_loops else '')
+    model_name      = 'l-town-chebnet-' + task +'-' + mode + '-' + 'n_{}'.format(n_timesteps)
     last_model_path = './studies/models/' + model_name + '-1.pt'
-    last_log_path   = './studies/logs/'   + model_name + '-1.csv' 
+    last_log_path   = './studies/logs/'   + model_name + '-1.csv'
         
     '''
      1. Make Graph
@@ -116,7 +119,10 @@ if __name__ == '__main__':
     
     x,y,scale,bias = dataCleaner(pressure_df    = nominal_pressure, # Pass the nodal pressures
                                  observed_nodes = sensors,          # Indicate which nodes have sensors
-                                 rescale        = scaling)          # Perform scaling on the timeseries data
+                                 rescale        = scaling,          # Perform scaling on the timeseries data
+                                 mode           = mode,             # Set data curation mode (n_timesteps / sensor_mask)
+                                 task           = task,             # Set data curation task (prediction  / reconstruction)
+                                 n_timesteps    = n_timesteps)      # Perform scaling on the timeseries data
     
     # Split the data into training and validation sets
     x_trn, x_val, y_trn, y_val = train_test_split(x, y, 

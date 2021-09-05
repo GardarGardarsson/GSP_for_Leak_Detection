@@ -13,6 +13,8 @@
 04 Leakage Detection/data
 04 Leakage Detection/2018_predictions.csv
 04 Leakage Detection/2019_predictions.csv
+04 Leakage Detection/2018_reconstructions.csv
+04 Leakage Detection/2019_reconstructions.csv
 sshfs
 test
 

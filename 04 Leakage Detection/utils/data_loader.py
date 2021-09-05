@@ -38,7 +38,9 @@ os.chdir('..')
 from modules.torch_samplers import RandomBatchSampler
 
 # Function to load the timeseries datasets of the BattLeDIM challenge
-def battledimLoader(observed_nodes, n_nodes=782, path='./BattLeDIM/', file='2018_SCADA_Pressures.csv', rescale=False, scale=None, bias=None):
+def battledimLoader(observed_nodes, n_nodes=782, path='./BattLeDIM/', file='2018_SCADA_Pressures.csv',
+                    rescale=False, scale=None, bias=None,
+                    mode='sensor_mask',task='reconstruction',n_timesteps=None):
     '''
     Function for loading the SCADA .csv datasets of the BattLeDIM competition
     and returning it in a dataformat suitable for the GNN model to ingest.
@@ -84,25 +86,56 @@ def battledimLoader(observed_nodes, n_nodes=782, path='./BattLeDIM/', file='2018
     # User has option of rescaling the imported data
     if rescale:
         df = (df - bias) / scale
-    
+        
     # Generate a temporary image of the DataFrame, that's been filled with zeros
     # at the un-observed nodes
     temp = df.T.reindex(list(range(1,n_nodes+1)),fill_value=0.0)
         
-    # Create a "mask" array, that's set to 1 at the observed nodes and 0 otherwise
-    arr2 = np.array(temp.mask(temp>0.0,1).astype('int'))
+    if mode=='sensor_mask':
 
-    # Create a numpy array from the temporary image
-    arr1 = np.array(temp)
+        # Create a "mask" array, that's set to 1 at the observed nodes and 0 otherwise
+        arr2 = np.array(temp.mask(temp>0.0,1).astype('int'))
 
-    # Stack and transpose the observation and mask arrays
-    result = np.stack((arr1,arr2),axis=0).T
+        # Create a numpy array from the temporary image
+        arr1 = np.array(temp)
+
+        # Stack and transpose the observation and mask arrays
+        result = np.stack((arr1,arr2),axis=0).T
+        
+    # Returns a (n_observations, n_nodes, n_timesteps) feature vector (x) where the 3rd dimension
+    # is the timesteps t, t-1, t-2 ... t-n leading to the observation to be predicted, at t+1
+    if mode=='n_timesteps':
+        
+        x_df = temp.T                                                   # The feature dataframe (missing observations)
+
+        if task == 'prediction':                                        # If we're doing prediction we set the
+            n_samples = len(x_df)                                       # no.of samples as length of DF
+            
+        elif task == 'reconstruction':                                  # If we're doing reconstruction we set the
+            n_samples = len(x_df)+1                                     # no.of samples as length of DF + 1 due to
+                                                                        # slicing
+                
+        window_start = 0                                                # Set the start/end of the rolling window
+        window_end   = n_timesteps                                      # to be used to retrieve t-n timesteps for x
+
+        x_ = []                                                         # Initialise temp x_ and y_ lists
+                                                                        # to contain our features and vectors
+
+        for i in range(n_timesteps,n_samples):                          # For each training sample
+            x_arr = (x_df.iloc[window_start:window_end].to_numpy().T)   # Add the t-n partial pressure signals
+            x_.append(np.flip(x_arr,axis=1))                            # Flip the order so that t is at index 0
+            window_start+=1                                             # Increment the
+            window_end  +=1                                             # rolling window
+
+        result = np.array(x_)                                           # Dump our lists to an np.array
+        
     
     # Return the results
     return result
 
-# Function to clean the nominal pressure dataframe 
-def dataCleaner(pressure_df, observed_nodes, rescale=None):
+# Function to clean the nominal pressure dataframe
+def dataCleaner(pressure_df, observed_nodes,
+                rescale=None, mode='sensor_mask', task='reconstruction', n_timesteps=None):
     '''
     Function for cleaning the pressure dataframes obtained by simulation of the
     nominal system model supplied with the BattLeDIM competition.
@@ -111,7 +144,7 @@ def dataCleaner(pressure_df, observed_nodes, rescale=None):
     Parameters
     ----------
     pressure_df : pd.DataFrame
-        Pandas dataframe where: 
+        Pandas dataframe where:
             columns (x) = nodes
             index   (y) = observations
     sensor_list : list of ints
@@ -119,8 +152,17 @@ def dataCleaner(pressure_df, observed_nodes, rescale=None):
     scaling : str
         'standard' - standard scaling
         'minmax'   - min/max scaling
+    mode : str
+        'sensor_mask' - A per timestep stacked feature output np.array as per below
+        'n_timesteps' - A t-n timestep stacked feature output np.array as per below
+    task : str
+        'reconstruction' - Returns y[t]   for x[t],x[t-1]...x[t-n] timesteps
+        'prediction'     - Returns y[t+1] for x[t],x[t-1]...x[t-n] timesteps
+        
     Returns
     -------
+    if mode='sensor_mask'
+    
     x : np.array(n_obs,n_nodes,2)
         The incomplete pressure signal matrix w/ 'n' number of observations.
         This is the feature vector (x) for the GNN model
@@ -132,6 +174,20 @@ def dataCleaner(pressure_df, observed_nodes, rescale=None):
          22.43, 1    <- n4, ... observed
          0.0  , 0    <- n5, ... unknown
          ...     ]   etc.
+         
+    if mode='n_timesteps'
+    
+    x : np.array(n_obs,n_nodes,n_timesteps)
+        The incomplete pressure signal matrix w/ 'n' number of observations, for n timesteps
+        This is the feature vector (x) for the GNN model
+        
+        x =
+        [21.57, 22.81, 23.13, ... , t-n    <- n1, pressure at node 1 is observed
+         0.0  , 0.0  , 0.0  , ... , t-n    <- n2, pressure at node 2 is unknown
+         0.0  , 0.0  , 0.0  , ... , t-n    <- n3, ... unknown
+         22.43, 22.51, 23.41, ... , t-n    <- n4, ... observed
+         0.0  , 0.0  , 0.0  , ... , t-n    <- n5, ... unknown
+         ...     ]   etc.
         
     y : np.array(n_obs,n_nodes,2)
         The complete pressure signal matrix w/ 'n' number of observations.
@@ -139,13 +195,13 @@ def dataCleaner(pressure_df, observed_nodes, rescale=None):
         
         y =
         [21.57    <- n1, all values are observed
-         21.89    <- n2, 
+         21.89    <- n2,
          22.17    <- n3
          22.43    <- n4
          23.79    <- n5
          ...  ]   etc.
         
-    '''     
+    '''
     # The number of nodes in the passed dataframe
     n_nodes = len(pressure_df.columns)
     
@@ -165,7 +221,7 @@ def dataCleaner(pressure_df, observed_nodes, rescale=None):
         
     # Min/max scaling (normalising):
     elif rescale == 'minmax':
-        _min        = min(pressure_df.min())            # Find the absolute minimum value 
+        _min        = min(pressure_df.min())            # Find the absolute minimum value
         _max        = max(pressure_df.max())            # Find the absolute maximum value
         _rng        = _max - _min                       # Calculate the difference between (range)
         bias        = _min                              # Scaling bias is the min value
@@ -180,7 +236,7 @@ def dataCleaner(pressure_df, observed_nodes, rescale=None):
     # DataFrame where the index is the node number holding the sensor and the value is set to 1
     sensor_df = pd.DataFrame(data=[1 for i in observed_nodes],index=observed_nodes)
     
-    # Filled single row of DataFrame with the complete number of nodes, the unmonitored nodes are set to 0 
+    # Filled single row of DataFrame with the complete number of nodes, the unmonitored nodes are set to 0
     sensor_df = sensor_df.reindex(list(range(1,n_nodes+1)),fill_value=0)
     
     # Find the number of rows in the DataFrame to be masked...
@@ -192,16 +248,63 @@ def dataCleaner(pressure_df, observed_nodes, rescale=None):
     # Enforce matching indices of the two DataFrames to be broadcast together
     mask_df.index = pressure_df.index
     
-    # Generating the incomplete feature matrix (x)
-    x_mask = np.array(mask_df)
-    x_arr  = np.array(pressure_df.where(cond=mask_df==1,other = 0.0))
-    x      = np.stack((x_arr,x_mask),axis=2)
+    # Returns a (n_observations, n_nodes, 2) feature vector (x) where the 3rd dimension is a 0/1 mask
+    # of the observed nodes
+    if mode=='sensor_mask':
+        
+        # Generating the incomplete feature matrix (x)
+        x_mask = np.array(mask_df)
+        x_arr  = np.array(pressure_df.where(cond=mask_df==1,other = 0.0))
+        x      = np.stack((x_arr,x_mask),axis=2)
+
+        # Generating the complete label matrix (y)
+        y_arr  = np.array(pressure_df)
+        y      = np.stack((y_arr, ),axis=2)
     
-    # Generating the complete label matrix (y)
-    y_arr  = np.array(pressure_df)
-    y      = np.stack((y_arr, ),axis=2)
+    # Returns a (n_observations, n_nodes, n_timesteps) feature vector (x) where the 3rd dimension
+    # is the timesteps t, t-1, t-2 ... t-n leading to the observation to be predicted, at t+1
+    if mode=='n_timesteps':
+        
+        x_df         = pressure_df.where(cond=mask_df==1,other = 0.0)   # The feature dataframe (missing observations)
+        y_df         = pressure_df                                      # The label dataframe (complete observation)
+        
+        if task == 'prediction':                                        # If we're doing prediction we set the
+            n_samples = len(x_df)                                       # no.of samples as length of DF
+            
+        elif task == 'reconstruction':                                  # If we're doing reconstruction we set the
+            n_samples = len(x_df)+1                                     # no.of samples as length of DF + 1 due to
+                                                                        # slicing
+                
+        window_start = 0                                                # Set the start/end of the rolling window
+        window_end   = n_timesteps                                      # to be used to retrieve t-n timesteps for x
+
+        x_ = []                                                         # Initialise temp x_ and y_ lists
+        y_ = []                                                         # to contain our features and vectors
+
+        for i in range(n_timesteps,n_samples):                          # For each training sample
+            x_arr = (x_df.iloc[window_start:window_end].to_numpy().T)   # Add the t-n partial pressure signals
+            x_.append(np.flip(x_arr,axis=1))                            # Flip the order so that t is at index 0
+                                                                        # t-1 is at index 1, and so on
+            
+            if task == 'prediction':                                    # For prediction
+                y_.append(y_df.iloc[i])                                 # Add complete observation at t+1 as label
+                
+            elif task == 'reconstruction':                              # For reconstruction
+                y_.append(y_df.iloc[i-1])                               # Add complete observation at t as label
+            
+            window_start+=1                                             # Increment the
+            window_end  +=1                                             # rolling window
+
+        x = np.array(x_)                                                # Dump our lists
+        y = np.array(y_)                                                # to arrays
+        
+        row,col = y.shape                                               # Reshape the label array y
+        shape   = (row,col,1)                                           # so its dimensions are (n_observations, 1)
+        y = y.reshape(shape)                                            # not (n_observations, )
+        
+    return x,y,scale,bias                                               # Return the features, labels, scale & bias
     
-    return x,y,scale,bias
+
 
 # Function that embeds the x-y labels on the graph and returns a DataLoader obj.
 def dataGenerator(G, features, labels, batch_size, drop_last):

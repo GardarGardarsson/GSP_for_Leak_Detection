@@ -122,6 +122,6 @@ if __name__ == '__main__':
     
     # Set up formatting for the movie files
     Writer = animation.writers['ffmpeg']
-    writer = Writer(fps=15, metadata=dict(artist='Me'), bitrate=1800)
+    writer = Writer(fps=15, metadata=dict(artist='Me'), bitrate=-1)
     
     ani.save('./diff_2018-19.mp4', writer=writer)
