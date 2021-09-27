@@ -31,7 +31,7 @@ This dataset delivers the hypothetical WDN of *L-Town*, the topology of which is
 
 <img src="./Map.png" alt="L-Town" style="zoom:100%;" />
 
-Unmonitored nodes are plotted <span style="color:blue"> *blue* </span> and nodes with pressure sensors installed are plotted <span style="color:red"> *red* </span>. <br>From this, the objective will be to *infer* the pressure signals at the unobserved nodes, i.e. reconstructing the graph signal, and will be achieved with a GNN that uses a Chebyshev polynomial kernel.<br>Another model is trained to *predict* the pressure signals for the next timestep, from a window of previous observations. 
+Unmonitored nodes are plotted <span style="color:black"> *black* </span> and nodes with pressure sensors installed are plotted <span style="color:red"> *red* </span>. <br>From this, the objective will be to *infer* the pressure signals at the unobserved nodes, i.e. reconstructing the graph signal, and will be achieved with a GNN that uses a Chebyshev polynomial kernel.<br>Another model is trained to *predict* the pressure signals for the next timestep, from a window of previous observations. 
 
 Having done so, an opportunity is created for validating the predictions against the reconstructions, thereby obtaining a prediction error signal, a residual signal.
 
