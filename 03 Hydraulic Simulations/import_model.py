@@ -119,7 +119,7 @@ if __name__ == "__main__" :
      
     # Choice of GNN model
     parser.add_argument('--weights',
-                        default = 'inv_pipe_length',
+                        default = 'unweighted',
                         choices = ['unweighted' , 'hydraulic_loss' , 'log_hydraulic_loss',
                                    'pruned'     , 'pipe_length'    , 'inv_pipe_lengt'],
                         type    = str,

@@ -29,15 +29,27 @@ This folder thus contains `Python` scripts and `Jupyter` development notebooks f
 
 This dataset delivers the hypothetical WDN of *L-Town*, the topology of which is contained within an **EPANET** input file, `.inp`. EPANET is a hydraulic simulation tool, and a niche toolset is required to import the model and convert it to a `networkx` graph. Having converted the model to a graph, one may generate renderings of it, as per the image below. 
 
-<img src="./03 Hydraulic Simulations/figs/graph_pressure_sensors.png" alt="L-Town" style="zoom:100%;" />
+<img src="./03 Hydraulic Simulations/studies/figs/graph_pressure_sensors.png" alt="L-Town" style="zoom:100%;" />
 
-Unmonitored nodes are plotted <span style="color:blue"> *blue* </span> and nodes with pressure sensors installed are plotted <span style="color:red"> *red* </span>. <br>From this, the objective will be to *infer* the pressure signals at the unobserved node.
+Unmonitored nodes are plotted <span style="color:blue"> *blue* </span> and nodes with pressure sensors installed are plotted <span style="color:red"> *red* </span>. <br>From this, the objective will be to *infer* the pressure signals at the unobserved nodes, i.e. reconstructing the graph signal, and will be achieved with a GNN that uses a Chebyshev polynomial kernel.<br>Another model is trained to *predict* the pressure signals for the next timestep, from a window of previous observations. 
 
-Having done so, an opportunity is created for validating the hydraulic model recreation.
+Having done so, an opportunity is created for validating the predictions against the reconstructions, thereby obtaining a prediction error signal, a residual signal.
 
-By continuously reconstructing nodal pressure signals from real-time data, and validating the result against a known initial condition, we can start measuring discrepancies.
+With it, one may start measuring discrepancies.
 
 Using deviation based thresholding, we can then nominate a list of candidates as leaky using this approach.
+
+This directory, primarily holds the files that have to do constructing the GNNs (*predictor* and *reconstructor*) from the WDN topology, and their training.
+
+# `04 Leakage Detection`
+
+This directory holds the many notebooks (`00-09 Leak Detection: ... `) that were created to work with the outputs from the GNNs.<br>Predictions and reconstructions were generated for the whole of the year 2018, and 2019 with the GNNs. <br>The 2018 data is training data where the leakages are known and we may validate our detection method on. <br>The goal is then to predict the leaks that occurred in 2019. 
+
+The notebooks show the development of a statistical method to classify leakages from the residual signals.
+
+While the method presented in the dissertation is that of [*Boem et al*](https://discovery.ucl.ac.uk/id/eprint/10051702/1/DF_dataseries_final_sub.pdf), an implementation of `CUSUM` was further tested, and a time-series classifier, `InceptionTime` was also trained to classify the leakages. 
+
+This directory holds the code behind this development, i.e. going from residual signals to leak detection.
 
 
 
