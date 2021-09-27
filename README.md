@@ -29,7 +29,7 @@ This folder thus contains `Python` scripts and `Jupyter` development notebooks f
 
 This dataset delivers the hypothetical WDN of *L-Town*, the topology of which is contained within an **EPANET** input file, `.inp`. EPANET is a hydraulic simulation tool, and a niche toolset is required to import the model and convert it to a `networkx` graph. Having converted the model to a graph, one may generate renderings of it, as per the image below. 
 
-<img src="./03 Hydraulic Simulations/studies/figs/graph_pressure_sensors.png" alt="L-Town" style="zoom:100%;" />
+<img src="./Map.png" alt="L-Town" style="zoom:100%;" />
 
 Unmonitored nodes are plotted <span style="color:blue"> *blue* </span> and nodes with pressure sensors installed are plotted <span style="color:red"> *red* </span>. <br>From this, the objective will be to *infer* the pressure signals at the unobserved nodes, i.e. reconstructing the graph signal, and will be achieved with a GNN that uses a Chebyshev polynomial kernel.<br>Another model is trained to *predict* the pressure signals for the next timestep, from a window of previous observations. 
 
