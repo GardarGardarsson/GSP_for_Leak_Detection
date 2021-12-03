@@ -2,6 +2,12 @@
 
 `ssh -X ucee<initials>@<server>.ee.ucl.ac.uk`
 
+## Connect to a remote Jupyter Notebook
+
+![image-20211027100620732](/Users/gardar/Library/Application Support/typora-user-images/image-20211027100620732.png)
+
+
+
 ### Mount a `Remote` Directory `Locally` on your Mac OS X 
 
 Install a `FUSE` (**F**ilesystem in **USE**rspace ) program for Mac OS X, like [macFUSE](https://osxfuse.github.io/)
